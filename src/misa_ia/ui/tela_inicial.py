@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import QHBoxLayout,QLabel,QMainWindow,QPushButton,QVBoxLayout,QWidget,QFrame,QGridLayout,QSizePolicy,QMessageBox
-from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis, QCategoryAxis
+from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis, QCategoryAxis, QSplineSeries
+from ..simulation.sinais_vitais_simulacao import SinalVitalSimulacao
 
 
 class TelaInicial(QMainWindow):
@@ -12,6 +13,8 @@ class TelaInicial(QMainWindow):
         self.setWindowTitle("M.I.S.A - Tela Inicial")
         self.resize(800, 600)
         self.setMinimumSize(800, 600)
+        self.simulator = SinalVitalSimulacao(self)
+        self.simulator.measurement_generated.connect(self.update_chart)
 
         central = QWidget()
         central.setObjectName("layout_fundo")
@@ -152,6 +155,7 @@ class TelaInicial(QMainWindow):
     )
 
         self.setCentralWidget(central)
+        self.simulator.start()
 
     def montar_conteudo(self) -> QWidget:
         #Criar o widget principal da área abaixo do cabeçãlho, os cards e tudo mais
@@ -336,32 +340,47 @@ class TelaInicial(QMainWindow):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 0, 10, 10)
 
-        grafico = QLabel()
+        self.grafico = QChart()
+        self.grafico.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
+        self.grafico_view = QChartView(self.grafico)
+        self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
+        self.grafico_view.setStyleSheet("border: none; background-color: white;")
 
-        grafico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grafico.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
-        grafico.setScaledContents(True)
+        self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        caminho_grafico = (
-            Path(__file__).resolve().parents[3]
-            / "assets"
-            / "grafico_simulacao.png"
-        )
-        imagem = QPixmap(str(caminho_grafico))
+        layout.addWidget(self.grafico_view, 1)
 
-        if imagem.isNull():
-            grafico.setText("Imagem do gráfico não encontrada.")
-        else:
-            imagem_redimensionada = imagem.scaled(
-                480,
-                250,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        self.oxigenio_serie = QSplineSeries()
+        self.oxigenio_serie.setName("Oxigênio")
 
-            grafico.setPixmap(imagem_redimensionada)
+        self.batimentos_serie = QSplineSeries()
+        self.batimentos_serie.setName("Batimento Cardíaco")
 
-        layout.addWidget(grafico, 1)
+        self.pressao_serie = QSplineSeries()
+        self.pressao_serie.setName("Pressão Arterial")
+
+        self.grafico.addSeries(self.oxigenio_serie)
+        self.grafico.addSeries(self.batimentos_serie)
+        self.grafico.addSeries(self.pressao_serie)
+
+        self.axis_x = QCategoryAxis()
+        self.axis_x.setTitleText("Horário")
+
+        self.axis_y = QValueAxis()
+        self.axis_y.setRange(0, 120)
+        self.axis_y.setTitleText("Valor")
+
+        self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
+        self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
+
+        for series in (
+            self.oxigenio_serie,
+            self.batimentos_serie,
+            self.pressao_serie,
+        ):
+            series.attachAxis(self.axis_x)
+            series.attachAxis(self.axis_y)
+
         return card
 
     def editar_paciente(self) -> None:
@@ -387,3 +406,24 @@ class TelaInicial(QMainWindow):
             "Histórico",
             "Aqui será exibido o histórico completo.",
         )
+
+    def update_chart(self, medicao):
+        index = self.oxigenio_serie.count()
+        horario = medicao.tempomedicao.strftime("%H:%M")
+
+        self.oxigenio_serie.append(index, medicao.oxigenio)
+        self.batimentos_serie.append(index, medicao.batimento_cardiaco)
+        self.pressao_serie.append(index, medicao.pressao_arterial)
+
+        self.oxigenio_serie.setPointsVisible(True)
+        self.batimentos_serie.setPointsVisible(True)
+        self.pressao_serie.setPointsVisible(True)
+
+        self.axis_x.append(horario, index + 1)
+        self.axis_x.setRange(0, max(1, index + 1))
+
+        # Mantém somente as últimas 24 medições, equivalentes a 2 horas.
+        if self.oxigenio_serie.count() > 24:
+            self.oxigenio_serie.remove(0)
+            self.batimentos_serie.remove(0)
+            self.pressao_serie.remove(0)
