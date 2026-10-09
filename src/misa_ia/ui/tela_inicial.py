@@ -2,9 +2,13 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtWidgets import QHBoxLayout,QLabel,QMainWindow,QPushButton,QVBoxLayout,QWidget,QFrame,QGridLayout,QSizePolicy,QMessageBox
+from PySide6.QtWidgets import QDialog, QHBoxLayout,QLabel,QMainWindow,QPushButton,QVBoxLayout,QWidget,QFrame,QGridLayout,QSizePolicy,QMessageBox
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis, QCategoryAxis, QSplineSeries
 from ..simulation.sinais_vitais_simulacao import SinalVitalSimulacao
+from .dialogs.editar_paciente_dialog import EditarPacienteDialog
+from .dialogs.procedimento_dialog import CadastrarProcedimentoDialog
+from .dialogs.medicacao_dialog import CadastrarMedicacaoDialog
+from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 
 
 class TelaInicial(QMainWindow):
@@ -13,6 +17,22 @@ class TelaInicial(QMainWindow):
         self.setWindowTitle("M.I.S.A - Tela Inicial")
         self.resize(800, 600)
         self.setMinimumSize(800, 600)
+
+        self.paciente = {
+            "nome": "Beto",
+            "especie": "Cachorro",
+            "idade": 7,
+            "porte": "Médio",
+            "medico_procedimento": "Dr. Rafael",
+            "procedimento": "Cirurgia de Pedra no Rim",
+            "medico_medicacao": "Dra. Ana",
+            "ultima_medicacao": "Propofol",
+            "quantidade_medicacao": "15 mg",
+            "estado_clinico": "Estável",
+        }
+
+        self.historico = []
+
         self.simulator = SinalVitalSimulacao(self)
         self.simulator.measurement_generated.connect(self.update_chart)
 
@@ -122,20 +142,6 @@ class TelaInicial(QMainWindow):
             color: #08b9df;
         }
 
-        #botao_acao {
-        background-color: #2100b8;
-        color: white;
-        border: none;
-        border-radius: 22px;
-        padding: 6px 18px;
-        min-height: 32px;
-        font-size: 16px;
-    }
-
-        #botao_acao:hover {
-        background-color: #351bc9;
-        }
-
         #botao_ver_mais {
             color: #2100b8;
             background-color: transparent;
@@ -232,28 +238,17 @@ class TelaInicial(QMainWindow):
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        informacoes = QLabel(
-            "<span style='color:#08b9df'><b>Nome:</b></span> Beto<br>"
-            "<span style='color:#08b9df'><b>Espécie:</b></span> Cachorro<br>"
-            "<span style='color:#08b9df'><b>Idade:</b></span> 7 anos<br>"
-            "<span style='color:#08b9df'><b>Porte:</b></span> Médio<br><br>"
-            "<span style='color:#08b9df'><b>Médico Responsável:</b></span> Dr. Rafael<br>"
-            "<span style='color:#08b9df'><b>Procedimento:</b></span> Cirurgia de Pedra no Rim<br>"
-            "<span style='color:#08b9df'><b>Estado Clínico:</b></span> Estável<br>"
-            "<span style='color:#08b9df'><b>Última Medicação:</b></span> Propofol"
-            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-            "<span style='color:#08b9df'><b>Qtd:</b></span> 15 mg"
-        )
-        informacoes.setObjectName("informacoes_paciente")
-        informacoes.setTextFormat(Qt.TextFormat.RichText)
-        informacoes.setStyleSheet("font-size: 20px;")
-
-        informacoes.setWordWrap(False)
+        self.informacoes_paciente = QLabel()
+        self.informacoes_paciente.setObjectName("informacoes_paciente")
+        self.informacoes_paciente.setTextFormat(Qt.TextFormat.RichText)
+        self.informacoes_paciente.setStyleSheet("font-size: 20px;")
+        self.informacoes_paciente.setWordWrap(False)
+        self.atualizar_informacoes_paciente()
 
         linha_informacoes = QHBoxLayout()
         linha_informacoes.setContentsMargins(0, 0, 0, 0)
         linha_informacoes.setSpacing(8)
-        linha_informacoes.addWidget(informacoes, 1)
+        linha_informacoes.addWidget(self.informacoes_paciente, 1)
 
         editar = QPushButton("Editar")
         editar.setObjectName("botao_acao")
@@ -315,17 +310,14 @@ class TelaInicial(QMainWindow):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 0, 14, 10)
 
-        historico = QLabel(
-        "Medicação: Paracetamol                 Qtd: 0.5mg<br>"
-        "data: 03/09/2026 - hora: 19:30h<br><br>"
-        "Procedimento: Cirurgia de Pele       "
-        "Médico Responsável: Dr. Rafael<br>"
-        "data: 03/09/2026 - hora: 20:30h"
-    )
+        self.historico_label = QLabel()
+        self.historico_label.setWordWrap(True)
 
-        historico.setTextFormat(Qt.TextFormat.RichText)
-        historico.setWordWrap(True)
-        layout.addWidget(historico)
+        self.atualizar_card_historico()
+
+        self.historico_label.setTextFormat(Qt.TextFormat.RichText)
+        self.historico_label.setWordWrap(True)
+        layout.addWidget(self.historico_label)
 
         ver_mais = QPushButton("Ver Mais")
         ver_mais.setObjectName("botao_ver_mais")
@@ -384,28 +376,46 @@ class TelaInicial(QMainWindow):
         return card
 
     def editar_paciente(self) -> None:
-        QMessageBox.information(self, "Editar Paciente", "Função de edição de paciente não implementada.")
-
+        self.popup_editar_paciente = EditarPacienteDialog(self.paciente, self)
+        if self.popup_editar_paciente.exec() == QDialog.DialogCode.Accepted:
+            self.paciente.update(self.popup_editar_paciente.dados())
+            self.atualizar_informacoes_paciente()
+            
     def cadastrar_procedimento(self) -> None:
-        QMessageBox.information(
-            self,
-            "Procedimento",
-            "Aqui será aberto o cadastro de procedimento.",
-        )
+        dialogo = CadastrarProcedimentoDialog(self.paciente, self)
+
+        if dialogo.exec() == QDialog.DialogCode.Accepted:
+            dados = dialogo.dados()
+
+            self.historico.insert(0, dados)
+
+            self.paciente["procedimento"] = dados["procedimento"]
+            self.paciente["medico_procedimento"] = (
+                dados["medico_procedimento"]
+            )
+
+            self.atualizar_informacoes_paciente()
+            self.atualizar_card_historico()
 
     def cadastrar_medicacao(self) -> None:
-        QMessageBox.information(
-            self,
-            "Medicação",
-            "Aqui será aberto o cadastro de medicação.",
-        )
+        dialogo = CadastrarMedicacaoDialog(self.paciente, self)
+
+        if dialogo.exec() == QDialog.DialogCode.Accepted:
+            dados = dialogo.dados()
+
+            self.historico.insert(0, dados)
+
+            self.paciente["ultima_medicacao"] = dados["medicacao"]
+            self.paciente["quantidade_medicacao"] = (
+                f"{dados['quantidade']} {dados['unidade']}"
+            )
+
+            self.atualizar_informacoes_paciente()
+            self.atualizar_card_historico()
 
     def ver_historico_completo(self) -> None:
-        QMessageBox.information(
-            self,
-            "Histórico",
-            "Aqui será exibido o histórico completo.",
-        )
+        dialogo = HistoricoDialog(self.historico,self)
+        dialogo.exec()
 
     def update_chart(self, medicao):
         index = self.oxigenio_serie.count()
@@ -427,3 +437,57 @@ class TelaInicial(QMainWindow):
             self.oxigenio_serie.remove(0)
             self.batimentos_serie.remove(0)
             self.pressao_serie.remove(0)
+
+    def atualizar_informacoes_paciente(self) -> None:
+        self.informacoes_paciente.setText(
+            f"<span style='color:#08b9df'><b>Nome:</b></span> "
+            f"{self.paciente['nome']}<br>"
+            f"<span style='color:#08b9df'><b>Espécie:</b></span> "
+            f"{self.paciente['especie']}<br>"
+            f"<span style='color:#08b9df'><b>Idade:</b></span> "
+            f"{self.paciente['idade']} anos<br>"
+            f"<span style='color:#08b9df'><b>Porte:</b></span> "
+            f"{self.paciente['porte']}<br><br>"
+            f"<span style='color:#08b9df'><b>Responsável pela aplicação:</b></span> "
+            f"{self.paciente['medico_procedimento']}<br>"
+            f"<span style='color:#08b9df'><b>Procedimento:</b></span> "
+            f"{self.paciente['procedimento']}<br>"
+            f"<span style='color:#08b9df'><b>Estado Clínico:</b></span> "
+            f"{self.paciente['estado_clinico']}<br>"
+            f"<span style='color:#08b9df'><b>Última Medicação:</b></span> "
+            f"{self.paciente['ultima_medicacao']}"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+            f"<span style='color:#08b9df'><b>Qtd:</b></span> "
+            f"{self.paciente['quantidade_medicacao']}"
+        )
+
+    def atualizar_card_historico(self) -> None:
+        if not self.historico:
+            self.historico_label.setText(
+                "Nenhum procedimento ou medicação cadastrada."
+            )
+            return
+
+        textos = []
+
+        for registro in self.historico[:2]:
+            if registro["tipo"] == "Procedimento":
+                textos.append(
+                    f"Procedimento: {registro['procedimento']}<br>"
+                    f"Médico responsável: "
+                    f"{registro['medico_procedimento']}<br>"
+                    f"data: {registro['data']} - "
+                    f"hora: {registro['hora']}<br><br>"
+                )
+            else:
+                textos.append(
+                    f"Responsável: "
+                    f"{registro['medico_medicacao']}<br>"
+                    f"Medicação: {registro['medicacao']} "
+                    f"Qtd: {registro['quantidade']} "
+                    f"{registro['unidade']}<br>"
+                    f"data: {registro['data']} - "
+                    f"hora: {registro['hora']}<br><br>"
+                )
+
+        self.historico_label.setText("".join(textos))

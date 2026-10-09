@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from .ui.tela_inicial import TelaInicial
 from .ui.tela_login import TelaLogin
+from .ui.estilos import ESTILO_GLOBAL
 
 
 def _load_local_env() -> None:
@@ -23,6 +24,7 @@ def main() -> int:
     """Inicia o fluxo de login e abre a tela inicial após a autenticação."""
     _load_local_env()
     application = QApplication(sys.argv)
+    application.setStyleSheet(ESTILO_GLOBAL)
     login = TelaLogin()
     home_window = None
 
