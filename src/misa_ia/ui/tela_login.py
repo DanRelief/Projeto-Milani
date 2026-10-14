@@ -10,30 +10,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from . .database import autenticar_usuario
+from PySide6.QtWidgets import QListView
 
 
 class TelaLogin(QMainWindow):
-    """Janela de login com autenticação simulada em memória."""
+    """Janela de login com autenticação via banco de dados MySQL."""
 
     authenticated = Signal(dict)
-
-    # Usuários fictícios usados somente para simular a autenticação.
-    _FAKE_USERS = {
-        ("student", "1115152"): {
-            "name": "Bryan",
-            "role": "Aluno",
-            "identifier_label": "RA",
-            "identifier": "1115152",
-            "password": "1234",
-        },
-        ("teacher", "milani@misa.local"): {
-            "name": "Milani",
-            "role": "Docente",
-            "identifier_label": "E-mail",
-            "identifier": "milani@misa.local",
-            "password": "1234",
-        },
-    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -41,6 +25,7 @@ class TelaLogin(QMainWindow):
         self.setMinimumSize(420, 300)
 
         self.role_combo = QComboBox()
+        self.role_combo.setView(QListView())
         self.role_combo.addItem("Aluno", "student")
         self.role_combo.addItem("Docente", "teacher")
         self.role_combo.currentIndexChanged.connect(self._update_identifier_field)
@@ -84,24 +69,52 @@ class TelaLogin(QMainWindow):
 
         self.setStyleSheet(
             """
-            QMainWindow { background-color: #f7f9fc; }
-            QLabel#title { color: #1f4d3a; font-size: 20px; font-weight: 600; }
+            QMainWindow { 
+                background-color: #f7f9fc; 
+            }
+            QLabel { 
+                color: #2c3e50; 
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QLabel#title { 
+                color: #1f4d3a; 
+                font-size: 20px; 
+                font-weight: 700; 
+            }
             QLineEdit, QComboBox {
-                min-height: 30px;
-                padding: 2px 8px;
+                min-height: 32px;
+                padding: 2px 10px;
                 border: 1px solid #c7d0d9;
-                border-radius: 5px;
-                background-color: white;
+                border-radius: 6px;
+                background-color: #ffffff;
+                color: #1a1a1a;  /* Garante texto escuro visível ao digitar */
+                font-size: 13px;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 1px solid #287a55;
+            }
+            QComboBox QAbstractItemView {
+                border: 1px solid #c7d0d9;
+                background-color: #ffffff;    
+                color: #1a1a1a;               
+                selection-background-color: #287a55; 
+                selection-color: #ffffff;     
+                padding: 4px;
+                outline: 0px;
             }
             QPushButton {
-                min-height: 34px;
-                color: white;
+                min-height: 36px;
+                color: #ffffff;
                 background-color: #287a55;
                 border: none;
-                border-radius: 5px;
+                border-radius: 6px;
+                font-size: 14px;
                 font-weight: 600;
             }
-            QPushButton:hover { background-color: #216746; }
+            QPushButton:hover { 
+                background-color: #216746; 
+            }
             """
         )
 
@@ -118,17 +131,26 @@ class TelaLogin(QMainWindow):
         )
 
     def authenticate(self, role: str, identifier: str, password: str) -> bool:
-        """Autentica uma sessão e retorna se as credenciais são válidas."""
-        user = self._FAKE_USERS.get((role, identifier))
-        if user is None or user["password"] != password:
+        """Autentica o usuário consultando o banco MySQL."""
+        # Consulta o banco de dados MySQL
+        usuario = autenticar_usuario(role, identifier, password)
+
+        if usuario is None:
             return False
 
-        session = {key: value for key, value in user.items() if key != "password"}
+        # Monta o dicionário de sessão padronizado para a TelaInicial
+        session = {
+            "name": usuario.get("nome", ""),
+            "role": "Aluno" if role == "student" else "Docente",
+            "identifier_label": "RA" if role == "student" else "E-mail",
+            "identifier": usuario.get("identificador", identifier),
+        }
+
         self.authenticated.emit(session)
         return True
 
     def _handle_login(self) -> None:
-        """Valida o usuário contra a tabela fictícia de autenticação."""
+        """Valida e processa o envio do formulário de login."""
         identifier = self.identifier_input.text().strip()
         password = self.password_input.text()
 
@@ -141,16 +163,11 @@ class TelaLogin(QMainWindow):
             return
 
         role = self.role_combo.currentData()
-        user = self._FAKE_USERS.get((role, identifier))
-
-        if user is None or user["password"] != password:
+        
+        # Chama a autenticação com o MySQL
+        if not self.authenticate(role, identifier, password):
             QMessageBox.warning(
                 self,
                 "Login inválido",
                 "Verifique o perfil, o identificador e a senha.",
             )
-            return
-
-        # Envia somente os dados necessários para montar a sessão da tela inicial.
-        session = {key: value for key, value in user.items() if key != "password"}
-        self.authenticated.emit(session)
