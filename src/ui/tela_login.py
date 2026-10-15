@@ -195,7 +195,7 @@ class TelaLogin(QMainWindow):
         self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.tabs.setMaximumWidth(760)
 
-        assets_dir = Path(__file__).resolve().parents[3] / "assets"
+        assets_dir = Path(__file__).resolve().parents[2] / "assets"
         image_paths = sorted(
             path
             for path in assets_dir.glob("vet*")

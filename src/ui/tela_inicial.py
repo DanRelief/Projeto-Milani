@@ -79,7 +79,7 @@ class TelaInicial(QMainWindow):
         layout_cabecalho.setContentsMargins(16, 0, 16, 0)
         layout_cabecalho.setSpacing(16)
 
-        caminho_logo = Path(__file__).resolve().parents[3] / "assets" / "logo_misa.png"
+        caminho_logo = Path(__file__).resolve().parents[2] / "assets" / "logo_misa.png"
 
         logo = QLabel()
         if caminho_logo.exists():
@@ -173,7 +173,7 @@ class TelaInicial(QMainWindow):
 
         layout.addStretch()
 
-        caminho_logo = Path(__file__).resolve().parents[3] / "assets" / "logo_misa.png"
+        caminho_logo = Path(__file__).resolve().parents[2] / "assets" / "logo_misa.png"
         logo_menu = QLabel()
         imagem_logo = QPixmap(str(caminho_logo))
         logo_menu.setPixmap(
