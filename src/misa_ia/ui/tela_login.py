@@ -148,7 +148,9 @@ class TelaLogin(QMainWindow):
         if usuario is None:
             return False
 
+        # Inclui obrigatoriamente o 'id' do usuário cadastrado no MySQL
         session = {
+            "id": usuario.get("id"),  # <-- CAMPO ESSENCIAL PARA A CHAVE ESTRANGEIRA
             "name": usuario.get("nome", ""),
             "role": "Aluno" if role == "student" else "Docente",
             "identifier_label": "RA" if role == "student" else "E-mail",
@@ -185,17 +187,10 @@ class TelaLogin(QMainWindow):
             QMessageBox.information(
                 self,
                 "Sucesso",
-                "Conta criada com sucesso! Agora você pode fazer login.",
+                "Conta criada com sucesso! Realizando login...",
             )
-            # Limpa os campos de cadastro
-            self.cad_name_input.clear()
-            self.cad_identifier_input.clear()
-            self.cad_password_input.clear()
-
-            # Preenche automaticamente a aba de login e altera para ela
-            self.login_role_combo.setCurrentIndex(self.cad_role_combo.currentIndex())
-            self.login_identifier_input.setText(identifier)
-            self.tabs.setCurrentIndex(0)  # Alterna para a aba "Fazer Login"
+            # Tenta autenticar imediatamente após cadastrar para obter o ID
+            self.authenticate(role, identifier, password)
         else:
             QMessageBox.warning(self, "Erro no Cadastro", mensagem)
 

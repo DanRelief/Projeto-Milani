@@ -4,6 +4,7 @@ import mysql.connector
 
 
 def get_db_connection():
+    """Conecta ao banco MySQL utilizando variáveis do .env ou valores padrão."""
     return mysql.connector.connect(
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "root"),
@@ -14,6 +15,7 @@ def get_db_connection():
 
 
 def autenticar_usuario(role: str, identifier: str, password_plain: str) -> dict | None:
+    """Valida o login consultando a tabela usuarios no MySQL."""
     conn = None
     try:
         conn = get_db_connection()
@@ -37,7 +39,7 @@ def autenticar_usuario(role: str, identifier: str, password_plain: str) -> dict 
 
         return None
     except mysql.connector.Error as err:
-        print(f"Erro ao autenticar: {err}")
+        print(f"Erro ao autenticar usuário: {err}")
         return None
     finally:
         if conn and conn.is_connected():
@@ -45,20 +47,15 @@ def autenticar_usuario(role: str, identifier: str, password_plain: str) -> dict 
             conn.close()
 
 
-def cadastrar_usuario(
-    nome: str, papel: str, identificador: str, senha_plana: str
-) -> tuple[bool, str]:
-    """Cadastra um novo usuário no banco com senha criptografada."""
+def cadastrar_usuario(nome: str, papel: str, identificador: str, senha_plana: str) -> tuple[bool, str]:
+    """Cadastra um novo usuário criptografando a senha em bcrypt."""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Criptografa a senha antes de salvar
         salt = bcrypt.gensalt()
-        senha_hash = bcrypt.hashpw(
-            senha_plana.encode("utf-8"), salt
-        ).decode("utf-8")
+        senha_hash = bcrypt.hashpw(senha_plana.encode("utf-8"), salt).decode("utf-8")
 
         query = """
             INSERT INTO usuarios (nome, papel, identificador, senha_hash)
@@ -68,12 +65,70 @@ def cadastrar_usuario(
         conn.commit()
         return True, "Usuário cadastrado com sucesso!"
     except mysql.connector.Error as err:
-        if err.errno == 1062:  # Código de erro para entrada duplicada (UNIQUE)
-            return (
-                False,
-                "Este RA ou E-mail já está cadastrado no sistema.",
-            )
+        if err.errno == 1062:
+            return False, "Este RA/E-mail já está cadastrado."
         return False, f"Erro ao acessar o banco de dados: {err}"
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+def cadastrar_animal(dados: dict) -> tuple[bool, str]:
+    """Insere um novo animal no MySQL vinculado ao usuário responsável."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        query = """
+            INSERT INTO animais (
+                nome, especie, idade, porte, procedimento, 
+                estado_clinico, ultima_medicacao, quantidade, responsavel_aplicacao
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (
+            dados["nome"],
+            dados["especie"],
+            dados["idade"],
+            dados["porte"],
+            dados["procedimento"],
+            dados["estado_clinico"],
+            dados.get("ultima_medicacao"),
+            dados.get("quantidade"),
+            dados["responsavel_aplicacao"]
+        ))
+        conn.commit()
+        return True, "Animal cadastrado com sucesso!"
+    except mysql.connector.Error as err:
+        return False, f"Erro ao salvar animal: {err}"
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+def listar_animais() -> list[dict]:
+    """Retorna todos os animais cadastrados com o nome do usuário responsável."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT 
+                a.id, a.nome, a.especie, a.idade, a.porte, a.procedimento,
+                a.estado_clinico, a.ultima_medicacao, a.quantidade,
+                a.responsavel_aplicacao, u.nome AS nome_responsavel
+            FROM animais a
+            INNER JOIN usuarios u ON a.responsavel_aplicacao = u.id
+            ORDER BY a.id DESC
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    except mysql.connector.Error as err:
+        print(f"Erro ao buscar animais: {err}")
+        return []
     finally:
         if conn and conn.is_connected():
             cursor.close()
