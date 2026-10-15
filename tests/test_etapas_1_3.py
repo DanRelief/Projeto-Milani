@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from misa_ia.buffering.vital_buffer import VitalBuffer
-from misa_ia.domain.measurement import VitalParameter
-from misa_ia.simulation.sinais_vitais_simulacao import (
+from application.buffering.vital_buffer import VitalBuffer
+from domain.measurement import VitalParameter
+from infrastructure.simulation.sinais_vitais_simulacao import (
     SimuladorSinaisVitais,
 )
 
