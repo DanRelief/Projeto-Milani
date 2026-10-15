@@ -1,14 +1,50 @@
 from dataclasses import dataclass
 from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+
+class VitalParameter(str, Enum):
+    HEART_RATE = "heart_rate"
+    RESPIRATORY_RATE = "respiratory_rate"
+    SPO2 = "spo2"
+    TEMPERATURE = "temperature"
+    MEAN_ARTERIAL_PRESSURE = "mean_arterial_pressure"
+
+
+class DataSource(str, Enum):
+    SIMULATOR = "simulator"
+    CSV = "csv"
+    MONITOR = "monitor"
+    WIFI = "wifi"
+    BLUETOOTH = "bluetooth"
+
 
 @dataclass
 class Measurement:
-    tempomedicao: datetime
-    fluxo_o2_ar: float       # L/min
-    iso_sevo: float          # % (Agentes Inalatórios)
-    etco2: float             # mmHg
-    spo2: float              # % (Antigo oxigenio)
-    temperatura: float       # °C
-    freq_respiratoria: float # rpm
-    freq_cardiaca: float     # bpm (Antigo batimento_cardiaco)
-    pressao_arterial: float  # mmHg
+    patient_id: str
+    session_id: str
+    timestamp: datetime
+
+    parameter: VitalParameter
+    value: float
+    unit: str
+
+    source: DataSource
+
+    signal_quality: float | None = None
+    is_valid: bool = True
+
+    def __post_init__(self):
+        if not self.patient_id.strip():
+            raise ValueError("patient_id não pode ser vazio.")
+
+        if not self.session_id.strip():
+            raise ValueError("session_id não pode ser vazio.")
+
+        if self.signal_quality is not None:
+            if not 0.0 <= self.signal_quality <= 1.0:
+                raise ValueError(
+                    "signal_quality deve estar entre 0.0 e 1.0."
+                )

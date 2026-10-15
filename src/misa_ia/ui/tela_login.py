@@ -12,18 +12,16 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
-    QFrame,
     QGraphicsColorizeEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListView,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QTabWidget,
     QSizePolicy,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -85,7 +83,7 @@ class _GradienteSobreImagem(QWidget):
 
 
 class _CarrosselDeImagens(QWidget):
-    """Alterna as imagens da área visual com uma transição de opacidade."""
+    """Alterna os assets vet* com uma transição suave de opacidade."""
 
     def __init__(self, image_paths: list[Path], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -125,7 +123,7 @@ class _CarrosselDeImagens(QWidget):
         super().resizeEvent(event)
 
     def _show_next_image(self) -> None:
-        if len(self._images) < 2:
+        if len(self._images) < 2 or self._animation is not None:
             return
 
         next_index = (self._image_index + 1) % len(self._images)
@@ -164,6 +162,7 @@ class _CarrosselDeImagens(QWidget):
         self._effects[incoming_index].setOpacity(1.0)
         self._active_index = incoming_index
         self._image_index = image_index
+        self._animation = None
 
     def closeEvent(self, event) -> None:  # noqa: N802 - assinatura do Qt
         self._timer.stop()
@@ -171,47 +170,28 @@ class _CarrosselDeImagens(QWidget):
 
 
 class TelaLogin(QMainWindow):
-    """Janela de autenticação e cadastro de usuários no M.I.S.A."""
-    """Tela de login com autenticação simulada em memória."""
+    """Tela de login e cadastro de usuários do M.I.S.A."""
 
     authenticated = Signal(dict)
-    # Altere apenas este valor para aumentar ou reduzir a logo.
+    # Altere este valor para aumentar ou reduzir a logo.
     LOGO_SIZE = 190
-
-    _FAKE_USERS = {
-        ("student", "115152"): {
-            "name": "Bryan",
-            "role": "Aluno",
-            "identifier_label": "RA",
-            "identifier": "115152",
-            "password": "1234",
-        },
-        ("teacher", "milani@misa.local"): {
-            "name": "Milani",
-            "role": "Docente",
-            "identifier_label": "E-mail",
-            "identifier": "milani@misa.local",
-            "password": "1234",
-        },
-    }
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("M.I.S.A. - Acesso ao Sistema")
-        self.setMinimumSize(420, 380)
         self.setWindowTitle("M.I.S.A. - Login")
         self.setMinimumSize(900, 560)
         self.resize(1120, 680)
 
-        # Widget de Abas (Login / Criar Conta)
         self.tabs = QTabWidget()
-
-        # Construção da Aba de Login e da Aba de Cadastro
+        self.tabs.setObjectName("auth_tabs")
+        self.tabs.tabBar().hide()
         self.tab_login = self._criar_aba_login()
         self.tab_cadastro = self._criar_aba_cadastro()
-
         self.tabs.addTab(self.tab_login, "Fazer Login")
         self.tabs.addTab(self.tab_cadastro, "Criar Conta")
+        self.tabs.setCurrentIndex(0)
+        self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.tabs.setMaximumWidth(760)
 
         title = QLabel("Monitoramento Inteligente de Saúde Animal")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -410,54 +390,11 @@ class TelaLogin(QMainWindow):
         )
         image_panel = _CarrosselDeImagens(image_paths)
 
-        welcome = QLabel("Bem-vindo ao MISA")
-        welcome.setObjectName("welcome_title")
-        welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        profile_row = QHBoxLayout()
-        profile_row.setContentsMargins(0, 0, 0, 0)
-        profile_row.addStretch()
-        profile_caption = QLabel("TIPO DE ACESSO")
-        profile_caption.setObjectName("profile_caption")
-        profile_row.addWidget(profile_caption)
-        profile_row.addWidget(self.role_combo)
-
-        identifier_label = QLabel("RA")
-        identifier_label.setObjectName("field_label")
-        password_label = QLabel("SENHA")
-        password_label.setObjectName("field_label")
-        self._identifier_label = identifier_label
-
-        form_layout = QVBoxLayout()
-        form_layout.setSpacing(7)
-        form_layout.addWidget(identifier_label)
-        form_layout.addWidget(self.identifier_input)
-        form_layout.addSpacing(8)
-        form_layout.addWidget(password_label)
-        form_layout.addWidget(self.password_input)
-        form_layout.addSpacing(17)
-        form_layout.addWidget(self.login_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        form_layout.addSpacing(67)
-        form_layout.addWidget(cadastro_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        card = QFrame()
-        card.setObjectName("login_card")
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        card.setMaximumWidth(760)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(32, 26, 32, 24)
-        card_layout.setSpacing(0)
-        card_layout.addWidget(welcome)
-        card_layout.addSpacing(25)
-        card_layout.addLayout(profile_row)
-        card_layout.addSpacing(11)
-        card_layout.addLayout(form_layout)
-
         logo_label = QLabel()
         logo_label.setObjectName("misa_logo")
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_label.setFixedSize(self.LOGO_SIZE, self.LOGO_SIZE)
-        logo_path = Path(__file__).resolve().parents[3] / "assets" / "logo_misa.png"
+        logo_path = assets_dir / "logo_misa.png"
         logo = QPixmap(str(logo_path))
         if not logo.isNull():
             logo_label.setPixmap(
@@ -473,7 +410,7 @@ class TelaLogin(QMainWindow):
             logo_effect.setStrength(1.0)
             logo_label.setGraphicsEffect(logo_effect)
 
-        logo_caption = QLabel("M I S A")
+        logo_caption = QLabel("M.I.S.A.")
         logo_caption.setObjectName("logo_caption")
         logo_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -482,7 +419,7 @@ class TelaLogin(QMainWindow):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(58, 34, 58, 20)
         right_layout.addStretch(1)
-        right_layout.addWidget(card)
+        right_layout.addWidget(self.tabs)
         right_layout.addSpacing(18)
         right_layout.addWidget(logo_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         right_layout.addWidget(logo_caption, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -496,64 +433,176 @@ class TelaLogin(QMainWindow):
         page_layout.addWidget(image_panel, 1)
         page_layout.addWidget(right_panel, 1)
         self.setCentralWidget(page)
-        self._apply_styles()
+        self._aplicar_estilos()
 
-    def _apply_styles(self) -> None:
+    def _criar_aba_login(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("login_card")
+
+        welcome = QLabel("Bem-vindo ao MISA")
+        welcome.setObjectName("welcome_title")
+        welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.login_role_combo = QComboBox()
+        self.login_role_combo.setObjectName("role_selector")
+        self.login_role_combo.setMinimumHeight(28)
+        self.login_role_combo.setMinimumWidth(110)
+        self.login_role_combo.addItem("Aluno", "student")
+        self.login_role_combo.addItem("Docente", "teacher")
+
+        profile_row = QHBoxLayout()
+        profile_row.setContentsMargins(0, 0, 0, 0)
+        profile_row.addStretch()
+        profile_caption = QLabel("TIPO DE ACESSO")
+        profile_caption.setObjectName("profile_caption")
+        profile_row.addWidget(profile_caption)
+        profile_row.addWidget(self.login_role_combo)
+
+        self.login_identifier_input = QLineEdit()
+        self.login_identifier_input.setObjectName("login_field")
+        self.login_identifier_input.setPlaceholderText("Digite seu RA")
+        self.login_identifier_input.setMinimumHeight(40)
+
+        self.login_password_input = QLineEdit()
+        self.login_password_input.setObjectName("login_field")
+        self.login_password_input.setPlaceholderText("Digite sua senha")
+        self.login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.login_password_input.setMinimumHeight(40)
+
+        self._login_identifier_label = QLabel("RA")
+        self._login_identifier_label.setObjectName("field_label")
+        password_label = QLabel("SENHA")
+        password_label.setObjectName("field_label")
+
+        self.login_button = QPushButton("Entrar")
+        self.login_button.setObjectName("botao_acao")
+        self.login_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.login_button.clicked.connect(self._handle_login)
+        self.login_password_input.returnPressed.connect(self._handle_login)
+
+        cadastro_button = QPushButton("Não tem login? Cadastre-se")
+        cadastro_button.setObjectName("register_link")
+        cadastro_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        cadastro_button.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
+
+        form_layout = QVBoxLayout()
+        form_layout.setSpacing(7)
+        form_layout.addWidget(self._login_identifier_label)
+        form_layout.addWidget(self.login_identifier_input)
+        form_layout.addSpacing(8)
+        form_layout.addWidget(password_label)
+        form_layout.addWidget(self.login_password_input)
+        form_layout.addSpacing(17)
+        form_layout.addWidget(self.login_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        form_layout.addSpacing(67)
+        form_layout.addWidget(cadastro_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(32, 26, 32, 24)
+        layout.setSpacing(0)
+        layout.addWidget(welcome)
+        layout.addSpacing(25)
+        layout.addLayout(profile_row)
+        layout.addSpacing(11)
+        layout.addLayout(form_layout)
+
+        # Aliases mantidos para compatibilidade com o fluxo de auto-login existente.
+        self.role_combo = self.login_role_combo
+        self.identifier_input = self.login_identifier_input
+        self.password_input = self.login_password_input
+        self._identifier_label = self._login_identifier_label
+        self.login_role_combo.currentIndexChanged.connect(self._update_identifier_field)
+        return widget
+
+    def _criar_aba_cadastro(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("register_card")
+
+        title = QLabel("Criar conta")
+        title.setObjectName("welcome_title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.cad_role_combo = QComboBox()
+        self.cad_role_combo.setObjectName("role_selector")
+        self.cad_role_combo.addItem("Aluno", "student")
+        self.cad_role_combo.addItem("Docente", "teacher")
+        self.cad_role_combo.setMinimumHeight(32)
+
+        self.cad_name_input = QLineEdit()
+        self.cad_name_input.setObjectName("login_field")
+        self.cad_name_input.setPlaceholderText("Digite seu nome completo")
+        self.cad_name_input.setMinimumHeight(40)
+
+        self.cad_identifier_input = QLineEdit()
+        self.cad_identifier_input.setObjectName("login_field")
+        self.cad_identifier_input.setPlaceholderText("Digite seu RA")
+        self.cad_identifier_input.setMinimumHeight(40)
+
+        self.cad_password_input = QLineEdit()
+        self.cad_password_input.setObjectName("login_field")
+        self.cad_password_input.setPlaceholderText("Crie uma senha")
+        self.cad_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.cad_password_input.setMinimumHeight(40)
+
+        role_label = QLabel("TIPO DE ACESSO")
+        role_label.setObjectName("field_label_small")
+        name_label = QLabel("NOME")
+        name_label.setObjectName("field_label_small")
+        identifier_label = QLabel("RA / E-MAIL")
+        identifier_label.setObjectName("field_label_small")
+        password_label = QLabel("SENHA")
+        password_label.setObjectName("field_label_small")
+
+        cadastro_button = QPushButton("Cadastrar e salvar")
+        cadastro_button.setObjectName("botao_acao")
+        cadastro_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        cadastro_button.clicked.connect(self._handle_cadastro)
+
+        voltar_button = QPushButton("Voltar para o login")
+        voltar_button.setObjectName("register_link")
+        voltar_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        voltar_button.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
+
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(32, 26, 32, 24)
+        layout.setSpacing(7)
+        layout.addWidget(title)
+        layout.addSpacing(12)
+        layout.addWidget(role_label)
+        layout.addWidget(self.cad_role_combo)
+        layout.addWidget(name_label)
+        layout.addWidget(self.cad_name_input)
+        layout.addWidget(identifier_label)
+        layout.addWidget(self.cad_identifier_input)
+        layout.addWidget(password_label)
+        layout.addWidget(self.cad_password_input)
+        layout.addSpacing(15)
+        layout.addWidget(cadastro_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(18)
+        layout.addWidget(voltar_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        self.cad_role_combo.currentIndexChanged.connect(
+            self._update_registration_identifier_field
+        )
+        return widget
+
+    def _aplicar_estilos(self) -> None:
         self.setStyleSheet(
             """
-            QMainWindow { background-color: #f7f9fc; }
-            QLabel { color: #2c3e50; font-size: 13px; font-weight: 500; }
-            QLabel#title { color: #1f4d3a; font-size: 18px; font-weight: 700; }
-            
-            QTabWidget::pane { border: 1px solid #c7d0d9; background: #ffffff; border-radius: 6px; }
-            QTabBar::tab {
-                background: #e9ecef;
-                color: #495057;
-                padding: 8px 20px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                font-weight: 600;
-            }
-            QTabBar::tab:selected {
-                background: #ffffff;
-                color: #287a55;
-                border-bottom: 2px solid #287a55;
-            }
-
-            QLineEdit, QComboBox {
-                min-height: 30px;
-                padding: 2px 10px;
-                border: 1px solid #c7d0d9;
-                border-radius: 6px;
-                background-color: #ffffff;
-                color: #1a1a1a;
-                font-size: 13px;
-            }
-            QLineEdit:focus, QComboBox:focus { border: 1px solid #287a55; }
-
-            QComboBox QAbstractItemView {
-                border: 1px solid #c7d0d9;
-                background-color: #ffffff;
-                color: #1a1a1a;
-                selection-background-color: #287a55;
-                selection-color: #ffffff;
-                padding: 4px;
-            QMainWindow, QWidget#login_page, QWidget#image_panel {
-                background-color: #11bad2;
-            }
+            QMainWindow, QWidget#login_page, QWidget#image_panel,
             QWidget#right_panel {
                 background-color: #11bad2;
             }
-
-            QPushButton {
-                min-height: 34px;
-                color: #ffffff;
-                background-color: #287a55;
-            QFrame#login_card {
+            QTabWidget#auth_tabs {
+                background: transparent;
+            }
+            QTabWidget#auth_tabs::pane {
+                border: none;
+                background: transparent;
+            }
+            QWidget#login_card, QWidget#register_card {
                 background-color: #ffffff;
                 border: none;
-                border-radius: 6px;
-                font-size: 13px;
                 border-radius: 12px;
             }
             QLabel#welcome_title {
@@ -564,6 +613,11 @@ class TelaLogin(QMainWindow):
             QLabel#field_label {
                 color: #0cb6d2;
                 font-size: 20px;
+                font-weight: 700;
+            }
+            QLabel#field_label_small {
+                color: #0cb6d2;
+                font-size: 13px;
                 font-weight: 700;
             }
             QLabel#profile_caption {
@@ -612,6 +666,21 @@ class TelaLogin(QMainWindow):
                 border-color: #10b6d1;
                 background-color: #c2c2c2;
             }
+            QPushButton#botao_acao {
+                background-color: #2100b8;
+                color: white;
+                border: none;
+                border-radius: 22px;
+                padding: 6px 18px;
+                min-height: 32px;
+                font-size: 16px;
+            }
+            QPushButton#botao_acao:hover {
+                background-color: #351bc9;
+            }
+            QPushButton#botao_acao:pressed {
+                background-color: #180087;
+            }
             QPushButton#register_link {
                 color: #09afd0;
                 background: transparent;
@@ -627,47 +696,84 @@ class TelaLogin(QMainWindow):
         )
 
     def _update_identifier_field(self, index: int) -> None:
-        """Atualiza o rótulo e o exemplo conforme o perfil escolhido."""
-        is_student = self.role_combo.itemData(index) == "student"
-        self._identifier_label.setText("RA" if is_student else "E-MAIL")
-        self.identifier_input.setPlaceholderText(
+        """Atualiza o campo do login de acordo com o perfil selecionado."""
+        is_student = self.login_role_combo.itemData(index) == "student"
+        self._login_identifier_label.setText("RA" if is_student else "E-MAIL")
+        self.login_identifier_input.setPlaceholderText(
+            "Digite seu RA" if is_student else "Digite seu e-mail"
+        )
+
+    def _update_registration_identifier_field(self, index: int) -> None:
+        """Atualiza o placeholder do identificador no cadastro."""
+        is_student = self.cad_role_combo.itemData(index) == "student"
+        self.cad_identifier_input.setPlaceholderText(
             "Digite seu RA" if is_student else "Digite seu e-mail"
         )
 
     def authenticate(self, role: str, identifier: str, password: str) -> bool:
-        """Autentica uma sessão e retorna se as credenciais são válidas."""
-        user = self._FAKE_USERS.get((role, identifier))
-        if user is None or user["password"] != password:
+        """Autentica no banco e emite a sessão criada pelo usuário."""
+        usuario = autenticar_usuario(role, identifier, password)
+        if usuario is None:
             return False
 
-        session = {key: value for key, value in user.items() if key != "password"}
+        session = {
+            "name": usuario.get("nome", ""),
+            "role": "Aluno" if role == "student" else "Docente",
+            "identifier_label": "RA" if role == "student" else "E-mail",
+            "identifier": usuario.get("identificador", identifier),
+        }
+        if "primeiro_acesso" in usuario:
+            session["primeiro_acesso"] = usuario["primeiro_acesso"]
         self.authenticated.emit(session)
         return True
 
     def _handle_login(self) -> None:
-        """Valida o usuário contra a tabela fictícia de autenticação."""
-        identifier = self.identifier_input.text().strip()
-        password = self.password_input.text()
+        identifier = self.login_identifier_input.text().strip()
+        password = self.login_password_input.text()
+        role = self.login_role_combo.currentData()
 
         if not identifier or not password:
             QMessageBox.warning(
                 self,
                 "Campos obrigatórios",
-                "Preencha o identificador e a senha para continuar.",
+                "Preencha o identificador e a senha.",
             )
             return
 
-        role = self.role_combo.currentData()
         if not self.authenticate(role, identifier, password):
             QMessageBox.warning(
                 self,
-                "Login inválido",
-                "Verifique o perfil, o identificador e a senha.",
+                "Erro de Login",
+                "Perfil, identificador ou senha incorretos.",
             )
 
-    def _show_registration_message(self) -> None:
+    def _handle_cadastro(self) -> None:
+        nome = self.cad_name_input.text().strip()
+        identifier = self.cad_identifier_input.text().strip()
+        password = self.cad_password_input.text()
+        role = self.cad_role_combo.currentData()
+
+        if not nome or not identifier or not password:
+            QMessageBox.warning(
+                self,
+                "Campos obrigatórios",
+                "Preencha todos os campos para cadastrar.",
+            )
+            return
+
+        sucesso, mensagem = cadastrar_usuario(nome, role, identifier, password)
+        if not sucesso:
+            QMessageBox.warning(self, "Erro no Cadastro", mensagem)
+            return
+
         QMessageBox.information(
             self,
-            "Cadastro",
-            "O cadastro de novos usuários será disponibilizado em breve.",
+            "Sucesso",
+            "Conta criada com sucesso! Agora você pode fazer login.",
         )
+        self.cad_name_input.clear()
+        self.cad_identifier_input.clear()
+        self.cad_password_input.clear()
+        self.login_role_combo.setCurrentIndex(self.cad_role_combo.currentIndex())
+        self.login_identifier_input.setText(identifier)
+        self.tabs.setCurrentIndex(0)
