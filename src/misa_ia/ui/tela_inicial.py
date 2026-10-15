@@ -26,6 +26,10 @@ from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
+
 
 class TelaInicial(QMainWindow):
     def __init__(self, usuario: dict) -> None:
@@ -159,7 +163,7 @@ class TelaInicial(QMainWindow):
         card = self.criar_card()
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Informações do Paciente (inicialmente vazias)
@@ -175,7 +179,7 @@ class TelaInicial(QMainWindow):
 
         self.btn_editar_paciente = QPushButton("Editar")
         self.btn_editar_paciente.setObjectName("botao_acao")
-        self.btn_editar_paciente.setEnabled(False) # Desabilitado até carregar um paciente
+        self.btn_editar_paciente.setEnabled(False)  # Desabilitado até carregar um paciente
         self.btn_editar_paciente.clicked.connect(self.editar_paciente)
         linha_informacoes.addWidget(
             self.btn_editar_paciente,
@@ -184,13 +188,13 @@ class TelaInicial(QMainWindow):
 
         layout.addLayout(linha_informacoes)
 
-        # Seção CADASTRAR/MONITORAR
+        # Seção AÇÕES DO ANIMAL
         cadastrar_label = QLabel("AÇÕES DO ANIMAL")
         cadastrar_label.setObjectName("titulo_cadastrar")
         cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(cadastrar_label)
 
-        # Botões de Ação reposicionados dentro do Card de Paciente
+        # 1. Linha com os botões de Gestão do Animal (Cadastrar / Monitorar)
         linha_botoes_animais = QHBoxLayout()
         self.btn_cadastrar = QPushButton("Cadastrar Animal")
         self.btn_cadastrar.setObjectName("btn_card_animal")
@@ -207,22 +211,113 @@ class TelaInicial(QMainWindow):
 
         layout.addLayout(linha_botoes_animais)
 
-        # Botões extras de lançamento de procedimento/medicação
+        # 2. Linha com os botões de Lançamentos Clínicos (Procedimento / Medicação)
         linha_cadastro_eventos = QHBoxLayout()
-        procedimento = QPushButton("Procedimento")
-        procedimento.clicked.connect(self.cadastrar_procedimento)
+        btn_procedimento = QPushButton("Procedimento")
+        btn_procedimento.setObjectName("btn_card_animal")
+        btn_procedimento.clicked.connect(self.cadastrar_procedimento)
 
-        medicacao = QPushButton("Medicação")
-        medicacao.clicked.connect(self.cadastrar_medicacao)
+        btn_medicacao = QPushButton("Medicação")
+        btn_medicacao.setObjectName("btn_card_animal")
+        btn_medicacao.clicked.connect(self.cadastrar_medicacao)
 
         linha_cadastro_eventos.addStretch()
-        linha_cadastro_eventos.addWidget(procedimento)
-        linha_cadastro_eventos.addWidget(medicacao)
+        linha_cadastro_eventos.addWidget(btn_procedimento)
+        linha_cadastro_eventos.addWidget(btn_medicacao)
         linha_cadastro_eventos.addStretch()
 
         layout.addLayout(linha_cadastro_eventos)
 
         return card
+
+# Dentro da classe TelaInicial:
+
+    def criar_card_monitoramento(self) -> QFrame:
+        card = self.criar_card()
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.grafico = QChart()
+        self.grafico.setTitle("Sinais Vitais e Agentes Inalatórios")
+        self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation) # Animação desativada para plotagem contínua fluida
+
+        self.grafico_view = QChartView(self.grafico)
+        self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
+        self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        layout.addWidget(self.grafico_view, 1)
+
+        # Mapeamento e estilo das 8 séries de dados (Cor distinta para cada parâmetro)
+        self.series_map = {
+            "freq_cardiaca": (QSplineSeries(), "FC (bpm)", QColor("#E74C3C")),         # Vermelho
+            "pressao_arterial": (QSplineSeries(), "PA (mmHg)", QColor("#E67E22")),     # Laranja
+            "spo2": (QSplineSeries(), "SpO2 (%)", QColor("#2ECC71")),                  # Verde
+            "etco2": (QSplineSeries(), "ETCO2 (mmHg)", QColor("#F1C40F")),             # Amarelo
+            "freq_respiratoria": (QSplineSeries(), "FR (rpm)", QColor("#3498DB")),     # Azul Claro
+            "temperatura": (QSplineSeries(), "Temp (°C)", QColor("#9B59B6")),          # Roxo
+            "fluxo_o2_ar": (QSplineSeries(), "O2/Ar (L/min)", QColor("#1ABC9C")),      # Turquesa
+            "iso_sevo": (QSplineSeries(), "Iso/Sevo (%)", QColor("#34495E"))           # Cinza Escuro
+        }
+
+        for key, (series, label, color) in self.series_map.items():
+            series.setName(label)
+            pen = QPen(color)
+            pen.setWidth(2)
+            series.setPen(pen)
+            self.grafico.addSeries(series)
+
+        # Configuração dos Eixos
+        self.axis_x = QCategoryAxis()
+        self.axis_x.setTitleText("Horário Decorrido")
+
+        self.axis_y = QValueAxis()
+        self.axis_y.setRange(0, 180) # Amplitude abrangendo os principais sinais vitais
+        self.axis_y.setTitleText("Valor")
+
+        self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
+        self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
+
+        for series, _, _ in self.series_map.values():
+            series.attachAxis(self.axis_x)
+            series.attachAxis(self.axis_y)
+
+        return card
+
+    def update_chart(self, medicao) -> None:
+        primeira_serie = self.series_map["freq_cardiaca"][0]
+        index = primeira_serie.count()
+        horario = medicao.tempomedicao.strftime("%H:%M:%S")
+
+        # Dicionário dinâmico com fallback seguro (pega do atributo da medição ou usa 0.0)
+        valores = {
+            "freq_cardiaca": getattr(medicao, "freq_cardiaca", getattr(medicao, "batimento_cardiaco", 0.0)),
+            "pressao_arterial": getattr(medicao, "pressao_arterial", 0.0),
+            "spo2": getattr(medicao, "spo2", getattr(medicao, "oxigenio", 0.0)),
+            "etco2": getattr(medicao, "etco2", 0.0),
+            "freq_respiratoria": getattr(medicao, "freq_respiratoria", 0.0),
+            "temperatura": getattr(medicao, "temperatura", 0.0),
+            "fluxo_o2_ar": getattr(medicao, "fluxo_o2_ar", 0.0),
+            "iso_sevo": getattr(medicao, "iso_sevo", 0.0),
+        }
+
+        # Anexa os novos pontos em todas as séries simultaneamente
+        for key, val in valores.items():
+            series = self.series_map[key][0]
+            series.append(index, float(val))
+
+        # Atualização da escala X com janela deslizante
+        self.axis_x.append(horario, index + 1)
+        
+        JANELA_VISIVEL = 30 # Exibe até 30 medições simultâneas na tela
+        if index >= JANELA_VISIVEL:
+            self.axis_x.setRange(index - JANELA_VISIVEL + 1, index + 1)
+        else:
+            self.axis_x.setRange(0, max(1, index + 1))
+
+        # Limpeza de buffer de memória para séries muito longas
+        BUFFER_MAXIMO = 120
+        if primeira_serie.count() > BUFFER_MAXIMO:
+            for series, _, _ in self.series_map.values():
+                series.remove(0)
 
     def _abrir_cadastro_animal(self) -> None:
         dlg = DialogCadastrarAnimal(self.usuario, self)
@@ -323,52 +418,6 @@ class TelaInicial(QMainWindow):
 
         return card
 
-    def criar_card_monitoramento(self) -> QFrame:
-        card = self.criar_card()
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        self.grafico = QChart()
-        self.grafico.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
-        self.grafico_view = QChartView(self.grafico)
-        self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
-        self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        layout.addWidget(self.grafico_view, 1)
-
-        self.oxigenio_serie = QSplineSeries()
-        self.oxigenio_serie.setName("Oxigênio")
-
-        self.batimentos_serie = QSplineSeries()
-        self.batimentos_serie.setName("Batimento Cardíaco")
-
-        self.pressao_serie = QSplineSeries()
-        self.pressao_serie.setName("Pressão Arterial")
-
-        self.grafico.addSeries(self.oxigenio_serie)
-        self.grafico.addSeries(self.batimentos_serie)
-        self.grafico.addSeries(self.pressao_serie)
-
-        self.axis_x = QCategoryAxis()
-        self.axis_x.setTitleText("Horário")
-
-        self.axis_y = QValueAxis()
-        self.axis_y.setRange(0, 120)
-        self.axis_y.setTitleText("Valor")
-
-        self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
-        self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
-
-        for series in (
-            self.oxigenio_serie,
-            self.batimentos_serie,
-            self.pressao_serie,
-        ):
-            series.attachAxis(self.axis_x)
-            series.attachAxis(self.axis_y)
-
-        return card
-
     def editar_paciente(self) -> None:
         if self.paciente["nome"] == "---":
             QMessageBox.warning(self, "Aviso", "Selecione um animal antes de editar.")
@@ -410,27 +459,7 @@ class TelaInicial(QMainWindow):
     def ver_historico_completo(self) -> None:
         dialogo = HistoricoDialog(self.historico, self)
         dialogo.exec()
-
-    def update_chart(self, medicao) -> None:
-        index = self.oxigenio_serie.count()
-        horario = medicao.tempomedicao.strftime("%H:%M")
-
-        self.oxigenio_serie.append(index, medicao.oxigenio)
-        self.batimentos_serie.append(index, medicao.batimento_cardiaco)
-        self.pressao_serie.append(index, medicao.pressao_arterial)
-
-        self.oxigenio_serie.setPointsVisible(True)
-        self.batimentos_serie.setPointsVisible(True)
-        self.pressao_serie.setPointsVisible(True)
-
-        self.axis_x.append(horario, index + 1)
-        self.axis_x.setRange(0, max(1, index + 1))
-
-        if self.oxigenio_serie.count() > 24:
-            self.oxigenio_serie.remove(0)
-            self.batimentos_serie.remove(0)
-            self.pressao_serie.remove(0)
-
+        
     def atualizar_card_historico(self) -> None:
         if not self.historico:
             self.historico_label.setText("Nenhum procedimento ou medicação cadastrada.")
