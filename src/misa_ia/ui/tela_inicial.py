@@ -8,10 +8,11 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
+    QGraphicsOpacityEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,21 +25,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
 
-from PySide6.QtWidgets import (
-    QDialog,
-    QGraphicsOpacityEffect,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QFrame,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
-from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis, QCategoryAxis, QSplineSeries
 from ..simulation.sinais_vitais_simulacao import SinalVitalSimulacao
 from .dialogs.editar_paciente_dialog import EditarPacienteDialog
 from .dialogs.procedimento_dialog import CadastrarProcedimentoDialog
@@ -47,11 +33,6 @@ from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 
 from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
-
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
-
 
 class TelaInicial(QMainWindow):
     logout_requested = Signal()
@@ -146,89 +127,6 @@ class TelaInicial(QMainWindow):
         layout_fundo.addWidget(conteudo_widget, 1)
 
         self._aplicar_estilos()
-        layout_cabecalho.addWidget(dados_professor)
-        layout_cabecalho.addWidget(botao_menu)
-        layout_cabecalho.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        layout_fundo.addWidget(cabecalho, alignment=Qt.AlignmentFlag.AlignTop)
-        layout_fundo.addWidget(self.montar_conteudo())
-        self.setStyleSheet(
-            """
-            #cabecalho {
-                background-color: white;
-            }
-
-            #cabecalho QLabel {
-                font-size: 20px;
-                color: #aaaaaa;
-            }
-
-            #botao_menu {
-                background-color: transparent;
-                color: #08b9df;
-                border: none;
-                padding: 0;
-                min-width: 0;
-                max-width: none;
-                min-height: 0;
-                max-height: none;
-                font-size: 32px;
-                font-weight: bold;
-            }
-
-            #botao_menu:hover {
-                color: #078eaa;
-            }
-
-            #botao_menu:pressed {
-                color: #057d96;
-            }
-
-            #layout_fundo {
-                background-color: #08b9df;
-            }
-            """
-        )
-        self.setStyleSheet(self.styleSheet() + """
-        #card {
-            background-color: white;
-            border: none;
-            border-radius: 10px;
-        }
-
-        #titulo_secao {
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        #card QLabel {
-            color: black;
-            font-size: 16px;
-        }
-
-        #card QLabel b {
-            color: #08b9df;
-        }
-
-        #botao_ver_mais {
-            color: #2100b8;
-            background-color: transparent;
-            border: none;
-            font-size: 16px;
-            font-weight: bold;
-        }
-
-        #titulo_cadastrar {
-        color: #2100b8;
-        font-size: 20px;
-        font-weight: bold;
-        }
-
-    
-        """
-    )
-
         self.setCentralWidget(central)
         self.montar_menu_lateral(central, usuario)
         self.simulator.start()

@@ -12,11 +12,13 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
+    QFormLayout,
     QGraphicsColorizeEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListView,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -170,7 +172,7 @@ class _CarrosselDeImagens(QWidget):
 
 
 class TelaLogin(QMainWindow):
-    """Tela de login e cadastro de usuários do M.I.S.A."""
+    """Janela de autenticação e cadastro de usuários no M.I.S.A."""
 
     authenticated = Signal(dict)
     # Altere este valor para aumentar ou reduzir a logo.
@@ -178,7 +180,7 @@ class TelaLogin(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("M.I.S.A. - Login")
+        self.setWindowTitle("M.I.S.A. - Acesso ao Sistema")
         self.setMinimumSize(900, 560)
         self.resize(1120, 680)
 
@@ -193,195 +195,6 @@ class TelaLogin(QMainWindow):
         self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.tabs.setMaximumWidth(760)
 
-        title = QLabel("Monitoramento Inteligente de Saúde Animal")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setObjectName("title")
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(32, 24, 32, 24)
-        layout.setSpacing(16)
-        layout.addWidget(title)
-        layout.addWidget(self.tabs)
-
-        central_widget = QWidget()
-        central_widget.setLayout(layout)
-        self.setCentralWidget(central_widget)
-
-        self._aplicar_estilos()
-
-    def _criar_aba_login(self) -> QWidget:
-        widget = QWidget()
-
-        self.login_role_combo = QComboBox()
-        self.login_role_combo.setView(QListView())
-        self.login_role_combo.addItem("Aluno", "student")
-        self.login_role_combo.addItem("Docente", "teacher")
-
-        self.login_identifier_input = QLineEdit()
-        self.login_identifier_input.setPlaceholderText("Digite seu RA")
-
-        self.login_password_input = QLineEdit()
-        self.login_password_input.setPlaceholderText("Digite sua senha")
-        self.login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-        self.login_role_combo.currentIndexChanged.connect(
-            lambda idx: self._atualizar_label(
-                idx, self.login_role_combo, self.login_identifier_input, form
-            )
-        )
-
-        login_button = QPushButton("Entrar")
-        login_button.clicked.connect(self._handle_login)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Perfil:", self.login_role_combo)
-        form.addRow("RA:", self.login_identifier_input)
-        form.addRow("Senha:", self.login_password_input)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(16, 20, 16, 16)
-        layout.setSpacing(14)
-        layout.addLayout(form)
-        layout.addSpacing(10)
-        layout.addWidget(login_button)
-
-        widget.setLayout(layout)
-        return widget
-
-    def _criar_aba_cadastro(self) -> QWidget:
-        widget = QWidget()
-
-        self.cad_role_combo = QComboBox()
-        self.cad_role_combo.setView(QListView())
-        self.cad_role_combo.addItem("Aluno", "student")
-        self.cad_role_combo.addItem("Docente", "teacher")
-
-        self.cad_name_input = QLineEdit()
-        self.cad_name_input.setPlaceholderText("Digite seu nome completo")
-
-        self.cad_identifier_input = QLineEdit()
-        self.cad_identifier_input.setPlaceholderText("Digite seu RA")
-
-        self.cad_password_input = QLineEdit()
-        self.cad_password_input.setPlaceholderText("Crie uma senha")
-        self.cad_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-        self.cad_role_combo.currentIndexChanged.connect(
-            lambda idx: self._atualizar_label(
-                idx, self.cad_role_combo, self.cad_identifier_input, form
-            )
-        )
-
-        cad_button = QPushButton("Cadastrar e Salvar")
-        cad_button.clicked.connect(self._handle_cadastro)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Perfil:", self.cad_role_combo)
-        form.addRow("Nome:", self.cad_name_input)
-        form.addRow("RA:", self.cad_identifier_input)
-        form.addRow("Senha:", self.cad_password_input)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addLayout(form)
-        layout.addSpacing(6)
-        layout.addWidget(cad_button)
-
-        widget.setLayout(layout)
-        return widget
-
-    def _atualizar_label(self, index: int, combo: QComboBox, input_field: QLineEdit, form: QFormLayout) -> None:
-        is_student = combo.itemData(index) == "student"
-        label = form.labelForField(input_field)
-        if label is not None:
-            label.setText("RA:" if is_student else "E-mail:")
-        input_field.setPlaceholderText("Digite seu RA" if is_student else "Digite seu e-mail")
-
-    def authenticate(self, role: str, identifier: str, password: str) -> bool:
-        usuario = autenticar_usuario(role, identifier, password)
-        if usuario is None:
-            return False
-
-        # Inclui obrigatoriamente o 'id' do usuário cadastrado no MySQL
-        session = {
-            "id": usuario.get("id"),  # <-- CAMPO ESSENCIAL PARA A CHAVE ESTRANGEIRA
-            "name": usuario.get("nome", ""),
-            "role": "Aluno" if role == "student" else "Docente",
-            "identifier_label": "RA" if role == "student" else "E-mail",
-            "identifier": usuario.get("identificador", identifier),
-        }
-        self.authenticated.emit(session)
-        return True
-
-    def _handle_login(self) -> None:
-        identifier = self.login_identifier_input.text().strip()
-        password = self.login_password_input.text()
-        role = self.login_role_combo.currentData()
-
-        if not identifier or not password:
-            QMessageBox.warning(self, "Campos Obrigatórios", "Preencha o identificador e a senha.")
-            return
-
-        if not self.authenticate(role, identifier, password):
-            QMessageBox.warning(self, "Erro de Login", "Perfil, identificador ou senha incorretos.")
-
-    def _handle_cadastro(self) -> None:
-        nome = self.cad_name_input.text().strip()
-        identifier = self.cad_identifier_input.text().strip()
-        password = self.cad_password_input.text()
-        role = self.cad_role_combo.currentData()
-
-        if not nome or not identifier or not password:
-            QMessageBox.warning(self, "Campos Obrigatórios", "Preencha todos os campos para cadastrar.")
-            return
-
-        sucesso, mensagem = cadastrar_usuario(nome, role, identifier, password)
-
-        if sucesso:
-            QMessageBox.information(
-                self,
-                "Sucesso",
-                "Conta criada com sucesso! Realizando login...",
-            )
-            # Tenta autenticar imediatamente após cadastrar para obter o ID
-            self.authenticate(role, identifier, password)
-        else:
-            QMessageBox.warning(self, "Erro no Cadastro", mensagem)
-
-    def _aplicar_estilos(self) -> None:
-        self.role_combo = QComboBox()
-        self.role_combo.addItem("Aluno", "student")
-        self.role_combo.addItem("Docente", "teacher")
-        self.role_combo.setObjectName("role_selector")
-        self.role_combo.setMinimumHeight(28)
-        self.role_combo.setMinimumWidth(110)
-        self.role_combo.currentIndexChanged.connect(self._update_identifier_field)
-
-        self.identifier_input = QLineEdit()
-        self.identifier_input.setObjectName("login_field")
-        self.identifier_input.setPlaceholderText("Digite seu RA")
-        self.identifier_input.setMinimumHeight(40)
-
-        self.password_input = QLineEdit()
-        self.password_input.setObjectName("login_field")
-        self.password_input.setPlaceholderText("Digite sua senha")
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_input.setMinimumHeight(40)
-
-        self.login_button = QPushButton("Entrar")
-        self.login_button.setObjectName("botao_acao")
-        self.login_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.login_button.clicked.connect(self._handle_login)
-        self.password_input.returnPressed.connect(self._handle_login)
-
-        cadastro_button = QPushButton("Não tem login? Cadastre-se")
-        cadastro_button.setObjectName("register_link")
-        cadastro_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        cadastro_button.clicked.connect(self._show_registration_message)
-
         assets_dir = Path(__file__).resolve().parents[3] / "assets"
         image_paths = sorted(
             path
@@ -394,8 +207,7 @@ class TelaLogin(QMainWindow):
         logo_label.setObjectName("misa_logo")
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_label.setFixedSize(self.LOGO_SIZE, self.LOGO_SIZE)
-        logo_path = assets_dir / "logo_misa.png"
-        logo = QPixmap(str(logo_path))
+        logo = QPixmap(str(assets_dir / "logo_misa.png"))
         if not logo.isNull():
             logo_label.setPixmap(
                 logo.scaled(
@@ -444,6 +256,7 @@ class TelaLogin(QMainWindow):
         welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.login_role_combo = QComboBox()
+        self.login_role_combo.setView(QListView())
         self.login_role_combo.setObjectName("role_selector")
         self.login_role_combo.setMinimumHeight(28)
         self.login_role_combo.setMinimumWidth(110)
@@ -506,7 +319,7 @@ class TelaLogin(QMainWindow):
         layout.addSpacing(11)
         layout.addLayout(form_layout)
 
-        # Aliases mantidos para compatibilidade com o fluxo de auto-login existente.
+        # Nomes antigos preservados para compatibilidade com o fluxo existente.
         self.role_combo = self.login_role_combo
         self.identifier_input = self.login_identifier_input
         self.password_input = self.login_password_input
@@ -523,6 +336,7 @@ class TelaLogin(QMainWindow):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.cad_role_combo = QComboBox()
+        self.cad_role_combo.setView(QListView())
         self.cad_role_combo.setObjectName("role_selector")
         self.cad_role_combo.addItem("Aluno", "student")
         self.cad_role_combo.addItem("Docente", "teacher")
@@ -695,35 +509,44 @@ class TelaLogin(QMainWindow):
             """
         )
 
-    def _update_identifier_field(self, index: int) -> None:
-        """Atualiza o campo do login de acordo com o perfil selecionado."""
-        is_student = self.login_role_combo.itemData(index) == "student"
-        self._login_identifier_label.setText("RA" if is_student else "E-MAIL")
-        self.login_identifier_input.setPlaceholderText(
+    def _atualizar_label(
+        self,
+        index: int,
+        combo: QComboBox,
+        input_field: QLineEdit,
+        form: QFormLayout | None = None,
+    ) -> None:
+        """Mantém a atualização de RA/E-mail criada no formulário original."""
+        is_student = combo.itemData(index) == "student"
+        label = form.labelForField(input_field) if form is not None else None
+        if label is not None:
+            label.setText("RA:" if is_student else "E-mail:")
+        input_field.setPlaceholderText(
             "Digite seu RA" if is_student else "Digite seu e-mail"
         )
+        if input_field is self.login_identifier_input:
+            self._login_identifier_label.setText("RA" if is_student else "E-MAIL")
+
+    def _update_identifier_field(self, index: int) -> None:
+        """Compatibilidade com o nome usado pela tela original."""
+        self._atualizar_label(index, self.login_role_combo, self.login_identifier_input)
 
     def _update_registration_identifier_field(self, index: int) -> None:
-        """Atualiza o placeholder do identificador no cadastro."""
-        is_student = self.cad_role_combo.itemData(index) == "student"
-        self.cad_identifier_input.setPlaceholderText(
-            "Digite seu RA" if is_student else "Digite seu e-mail"
-        )
+        self._atualizar_label(index, self.cad_role_combo, self.cad_identifier_input)
 
     def authenticate(self, role: str, identifier: str, password: str) -> bool:
-        """Autentica no banco e emite a sessão criada pelo usuário."""
         usuario = autenticar_usuario(role, identifier, password)
         if usuario is None:
             return False
 
+        # Inclui obrigatoriamente o ID do usuário cadastrado no MySQL.
         session = {
+            "id": usuario.get("id"),
             "name": usuario.get("nome", ""),
             "role": "Aluno" if role == "student" else "Docente",
             "identifier_label": "RA" if role == "student" else "E-mail",
             "identifier": usuario.get("identificador", identifier),
         }
-        if "primeiro_acesso" in usuario:
-            session["primeiro_acesso"] = usuario["primeiro_acesso"]
         self.authenticated.emit(session)
         return True
 
@@ -735,7 +558,7 @@ class TelaLogin(QMainWindow):
         if not identifier or not password:
             QMessageBox.warning(
                 self,
-                "Campos obrigatórios",
+                "Campos Obrigatórios",
                 "Preencha o identificador e a senha.",
             )
             return
@@ -756,24 +579,19 @@ class TelaLogin(QMainWindow):
         if not nome or not identifier or not password:
             QMessageBox.warning(
                 self,
-                "Campos obrigatórios",
+                "Campos Obrigatórios",
                 "Preencha todos os campos para cadastrar.",
             )
             return
 
         sucesso, mensagem = cadastrar_usuario(nome, role, identifier, password)
-        if not sucesso:
+        if sucesso:
+            QMessageBox.information(
+                self,
+                "Sucesso",
+                "Conta criada com sucesso! Realizando login...",
+            )
+            # Preserva o fluxo do commit: autentica novamente para obter o ID.
+            self.authenticate(role, identifier, password)
+        else:
             QMessageBox.warning(self, "Erro no Cadastro", mensagem)
-            return
-
-        QMessageBox.information(
-            self,
-            "Sucesso",
-            "Conta criada com sucesso! Agora você pode fazer login.",
-        )
-        self.cad_name_input.clear()
-        self.cad_identifier_input.clear()
-        self.cad_password_input.clear()
-        self.login_role_combo.setCurrentIndex(self.cad_role_combo.currentIndex())
-        self.login_identifier_input.setText(identifier)
-        self.tabs.setCurrentIndex(0)
