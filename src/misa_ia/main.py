@@ -39,6 +39,21 @@ def main() -> int:
             home_window = TelaInicial(session)
             login.hide()
             home_window.show()
+    def open_home(usuario: dict[str, str]) -> None:
+        nonlocal home_window
+        home_window = TelaInicial(usuario)
+        home_window.logout_requested.connect(return_to_login)
+        login.hide()
+        home_window.show()
+
+    def return_to_login() -> None:
+        nonlocal home_window
+        if home_window is not None:
+            home_window.close()
+            home_window = None
+        login.show()
+        login.raise_()
+        login.activateWindow()
 
     login.authenticated.connect(open_home)
     login.show()

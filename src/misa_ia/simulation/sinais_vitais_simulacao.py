@@ -1,6 +1,147 @@
 import math
 import random
 from datetime import datetime, timedelta
+
+from src.misa_ia.domain.measurement import (
+    DataSource,
+    Measurement,
+    VitalParameter,
+)
+
+
+class SimuladorSinaisVitais:
+
+    def __init__(
+        self,
+        patient_id: str,
+        session_id: str,
+        seed: int | None = None
+    ):
+        self.patient_id = patient_id
+        self.session_id = session_id
+
+        self.random = random.Random(seed)
+
+        # Valores-base exclusivamente para simulação.
+        self.baseline = {
+            VitalParameter.HEART_RATE: 95.0,
+            VitalParameter.RESPIRATORY_RATE: 20.0,
+            VitalParameter.SPO2: 98.0,
+            VitalParameter.TEMPERATURE: 38.2,
+            VitalParameter.MEAN_ARTERIAL_PRESSURE: 80.0,
+        }
+
+        # Estado atual da simulação.
+        self.current_values = self.baseline.copy()
+
+        # Intensidade das pequenas variações sintéticas.
+        self.noise = {
+            VitalParameter.HEART_RATE: 1.2,
+            VitalParameter.RESPIRATORY_RATE: 0.5,
+            VitalParameter.SPO2: 0.2,
+            VitalParameter.TEMPERATURE: 0.03,
+            VitalParameter.MEAN_ARTERIAL_PRESSURE: 0.8,
+        }
+
+        self.units = {
+            VitalParameter.HEART_RATE: "bpm",
+            VitalParameter.RESPIRATORY_RATE: "rpm",
+            VitalParameter.SPO2: "%",
+            VitalParameter.TEMPERATURE: "°C",
+            VitalParameter.MEAN_ARTERIAL_PRESSURE: "mmHg",
+        }
+
+        def _next_value(self,parameter: VitalParameter) -> float:
+            current = self.current_values[parameter]
+            baseline = self.baseline[parameter]
+            noise = self.noise[parameter]
+
+            random_variation = self.random.gauss(0, noise)
+
+            # Faz o valor tender suavemente de volta ao baseline.
+            mean_reversion = (baseline - current) * 0.10
+
+            new_value = (
+                current
+                + random_variation
+                + mean_reversion
+            )
+
+            # Limite físico simples para SpO2.
+            if parameter == VitalParameter.SPO2:
+                new_value = max(0.0, min(100.0, new_value))
+
+            self.current_values[parameter] = new_value
+
+            return round(new_value, 2)
+
+        def generate_snapshot(self,timestamp: datetime | None = None) -> list[Measurement]:
+
+            if timestamp is None:
+                timestamp = datetime.now()
+
+            measurements = []
+
+            for parameter in self.baseline:
+                value = self._next_value(parameter)
+
+                measurement = Measurement(
+                    patient_id=self.patient_id,
+                    session_id=self.session_id,
+                    timestamp=timestamp,
+                    parameter=parameter,
+                    value=value,
+                    unit=self.units[parameter],
+                    source=DataSource.SIMULATOR,
+                    signal_quality=round(
+                        self.random.uniform(0.95, 1.0),
+                        2
+                    ),
+                )
+
+                measurements.append(measurement)
+
+            return measurements
+
+        def generate_series(
+        self,
+        duration_minutes: int,
+        interval_seconds: int = 5,
+        start_time: datetime | None = None
+    ) -> list[Measurement]:
+
+            if duration_minutes <= 0:
+                raise ValueError(
+                    "duration_minutes deve ser maior que zero."
+                )
+
+            if interval_seconds <= 0:
+                raise ValueError(
+                    "interval_seconds deve ser maior que zero."
+                )
+
+            if start_time is None:
+                start_time = datetime.now()
+
+            measurements = []
+
+            total_seconds = duration_minutes * 60
+
+            for elapsed_seconds in range(
+                0,
+                total_seconds,
+                interval_seconds
+            ):
+                timestamp = (
+                    start_time
+                    + timedelta(seconds=elapsed_seconds)
+                )
+
+                snapshot = self.generate_snapshot(timestamp)
+
+                measurements.extend(snapshot)
+
+            return measurements
 from zoneinfo import ZoneInfo
 from PySide6.QtCore import QObject, QTimer, Signal
 
