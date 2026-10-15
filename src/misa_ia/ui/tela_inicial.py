@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -61,8 +62,7 @@ class TelaInicial(QMainWindow):
         self.historico = []
 
         # Inicializa o simulador de sinais vitais
-        self.simulator = SinalVitalSimulacao(self)
-        self.simulator.measurement_generated.connect(self.update_chart)
+        self.simulator = None
 
         # Widget Central e Layout Principal
         central = QWidget()
@@ -129,7 +129,6 @@ class TelaInicial(QMainWindow):
         self._aplicar_estilos()
         self.setCentralWidget(central)
         self.montar_menu_lateral(central, usuario)
-        self.simulator.start()
 
     def montar_menu_lateral(
         self, central: QWidget, usuario: dict[str, str]
@@ -344,7 +343,8 @@ class TelaInicial(QMainWindow):
         self.logout_requested.emit()
 
     def closeEvent(self, evento) -> None:
-        self.simulator.stop()
+        if self.simulator is not None:
+            self.simulator.stop()
         super().closeEvent(evento)
 
     def montar_conteudo(self) -> QWidget:
@@ -507,36 +507,47 @@ class TelaInicial(QMainWindow):
         return card
 
     def update_chart(self, medicao) -> None:
-        primeira_serie = self.series_map["freq_cardiaca"][0]
-        index = primeira_serie.count()
-        horario = medicao.tempomedicao.strftime("%H:%M:%S")
+        if not medicao:
+            return
+        serie_referencia = self.series_map["spo2"][0]
+        index = serie_referencia.count()
+        horario = medicao[0].timestamp.strftime("%H:%M:%S")
 
         # Dicionário dinâmico com fallback seguro (pega do atributo da medição ou usa 0.0)
-        valores = {
-            "freq_cardiaca": getattr(medicao, "freq_cardiaca", getattr(medicao, "batimento_cardiaco", 0.0)),
-            "pressao_arterial": getattr(medicao, "pressao_arterial", 0.0),
-            "spo2": getattr(medicao, "spo2", getattr(medicao, "oxigenio", 0.0)),
-            "etco2": getattr(medicao, "etco2", 0.0),
-            "freq_respiratoria": getattr(medicao, "freq_respiratoria", 0.0),
-            "temperatura": getattr(medicao, "temperatura", 0.0),
-            "fluxo_o2_ar": getattr(medicao, "fluxo_o2_ar", 0.0),
-            "iso_sevo": getattr(medicao, "iso_sevo", 0.0),
+        mapa_series = {
+        "spo2": "spo2",
+        "temperature": "temperatura",
+        "mean_arterial_pressure": "pressao_arterial",
         }
 
-        # Anexa os novos pontos em todas as séries simultaneamente
-        for key, val in valores.items():
-            series = self.series_map[key][0]
-            series.append(index, float(val))
+        for medicoes in medicao:
+            chave = mapa_series.get(medicoes.parameter.value)
 
-        # Atualização da escala X com janela deslizante
+            if chave is None:
+                continue
+
+            self.series_map[chave][0].append(
+                index,
+                float(medicoes.value),
+            )
+
         self.axis_x.append(horario, index + 1)
-        
-        JANELA_VISIVEL = 30 # Exibe até 30 medições simultâneas na tela
-        if index >= JANELA_VISIVEL:
-            self.axis_x.setRange(index - JANELA_VISIVEL + 1, index + 1)
-        else:
-            self.axis_x.setRange(0, max(1, index + 1))
 
+        JANELA_VISIVEL = 30
+
+        if index >= JANELA_VISIVEL:
+            self.axis_x.setRange(
+                index - JANELA_VISIVEL + 1,
+                index + 1,
+            )
+        else:
+            self.axis_x.setRange(
+                0,
+                max(1, index + 1),
+            )
+
+        primeira_serie = self.series_map["spo2"][0]
+        
         # Limpeza de buffer de memória para séries muito longas
         BUFFER_MAXIMO = 120
         if primeira_serie.count() > BUFFER_MAXIMO:
@@ -564,6 +575,20 @@ class TelaInicial(QMainWindow):
         self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
 
         self.atualizar_informacoes_paciente()
+        if self.simulator is not None:
+            self.simulator.stop()
+
+        patient_id = str(animal["id"])
+        session_id = str(uuid4())
+
+        self.simulator = SinalVitalSimulacao(
+            patient_id=patient_id,
+            session_id=session_id,
+            parent=self,
+        )
+
+        self.simulator.measurement_generated.connect(self.update_chart)
+        self.simulator.start()
 
         pode_editar = e_proprietario or (self.usuario.get("role") == "Docente")
         self.btn_editar_paciente.setEnabled(pode_editar)
