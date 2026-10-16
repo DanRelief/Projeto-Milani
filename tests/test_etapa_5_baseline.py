@@ -21,7 +21,7 @@ def test_rolling_mediana_e_mad():
         0,
     )
 
-    values = [
+    valors = [
         98.0,
         98.1,
         97.9,
@@ -36,7 +36,7 @@ def test_rolling_mediana_e_mad():
 
     measurements = []
 
-    for index, value in enumerate(values):
+    for index, valor in enumerate(valors):
 
         measurements.append(
             Medicao(
@@ -52,10 +52,10 @@ def test_rolling_mediana_e_mad():
 
                 parametro=Vitalparametro.SPO2,
 
-                value=value,
-                unit="%",
+                valor=valor,
+                unidade="%",
 
-                source=FonteDados.SIMULATOR,
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )

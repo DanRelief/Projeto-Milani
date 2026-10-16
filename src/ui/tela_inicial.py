@@ -43,7 +43,7 @@ class TelaInicial(QMainWindow):
         self.usuario = usuario
         self.setWindowTitle("M.I.S.A - Tela Inicial")
         self.resize(1024, 720)
-        self.setminimoSize(900, 650)
+        self.setMinimumSize(900, 650)
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -516,8 +516,8 @@ class TelaInicial(QMainWindow):
         # Dicionário dinâmico com fallback seguro (pega do atributo da medição ou usa 0.0)
         mapa_series = {
         "spo2": "spo2",
-        "temperature": "temperatura",
-        "media_arterial_pressure": "pressao_arterial",
+        "temperatura": "temperatura",
+        "pressao_arterial_media": "pressao_arterial",
         }
 
         for medicoes in medicao:
@@ -528,7 +528,7 @@ class TelaInicial(QMainWindow):
 
             self.series_map[chave][0].append(
                 index,
-                float(medicoes.value),
+                float(medicoes.valor),
             )
 
         self.axis_x.append(horario, index + 1)

@@ -22,7 +22,7 @@ def test_features_spo2():
         0,
     )
 
-    values = [
+    valors = [
         98.0,
         97.0,
         96.0,
@@ -32,7 +32,7 @@ def test_features_spo2():
 
     measurements = []
 
-    for index, value in enumerate(values):
+    for index, valor in enumerate(valors):
 
         measurements.append(
             Medicao(
@@ -45,10 +45,10 @@ def test_features_spo2():
                 ),
 
                 parametro=Vitalparametro.SPO2,
-                value=value,
-                unit="%",
+                valor=valor,
+                unidade="%",
 
-                source=FonteDados.SIMULATOR,
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -133,8 +133,8 @@ def test_features_com_simulador():
 
     for parametro in [
         Vitalparametro.SPO2,
-        Vitalparametro.TEMPERATURE,
-        Vitalparametro.media_ARTERIAL_PRESSURE,
+        Vitalparametro.TEMPERATURA,
+        Vitalparametro.PRESSAO_ARTERIAL_MEDIA,
     ]:
 
         window = buffer.get_recent(
@@ -229,9 +229,9 @@ def test_inclinacao_constante():
                 data_hora=start
                 + timedelta(minutes=index),
                 parametro=Vitalparametro.SPO2,
-                value=98.0,
-                unit="%",
-                source=FonteDados.SIMULATOR,
+                valor=98.0,
+                unidade="%",
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )

@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from datetime import timedelta
 
-from domain.measurement import (
+from src.domain.measurement import (
     Medicao,
     Vitalparametro,
 )

@@ -13,32 +13,7 @@ def main() -> int:
 
     login = TelaLogin()
     home_window = None
-    primeiro_acesso_window = None
 
-    def open_home(session: dict) -> None:
-        nonlocal home_window
-        home_window = TelaInicial(session)
-        login.hide()
-        home_window.show() # Garante a exibição da TelaInicial
-
-        # Se for o primeiro acesso do usuário, abre a tela de cadastro primeiro
-        if session.get("primeiro_acesso"):
-            #primeiro_acesso_window = TelaPrimeiroAcesso(session)
-
-            def on_cadastro_completed(final_session: dict):
-                nonlocal home_window
-                home_window = TelaInicial(final_session)
-                primeiro_acesso_window.close()
-                home_window.show()
-
-            primeiro_acesso_window.completed.connect(on_cadastro_completed)
-            login.hide()
-            primeiro_acesso_window.show()
-        else:
-            # Acesso padrão
-            home_window = TelaInicial(session)
-            login.hide()
-            home_window.show()
     def open_home(usuario: dict[str, str]) -> None:
         nonlocal home_window
         home_window = TelaInicial(usuario)

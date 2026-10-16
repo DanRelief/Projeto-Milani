@@ -26,7 +26,7 @@ def test_robust_zscore():
         0,
     )
 
-    values = [
+    valors = [
         98.0,
         98.1,
         97.9,
@@ -41,7 +41,7 @@ def test_robust_zscore():
 
     measurements = []
 
-    for index, value in enumerate(values):
+    for index, valor in enumerate(valors):
 
         measurements.append(
             Medicao(
@@ -57,10 +57,10 @@ def test_robust_zscore():
 
                 parametro=Vitalparametro.SPO2,
 
-                value=value,
-                unit="%",
+                valor=valor,
+                unidade="%",
 
-                source=FonteDados.SIMULATOR,
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -71,12 +71,12 @@ def test_robust_zscore():
         minimo_samples=5,
     )
 
-    valor_atual_value = (
-        measurements[-1].value
+    valor_atual_valor = (
+        measurements[-1].valor
     )
 
     result = calculate_robust_zscore(
-        valor_atual_value=valor_atual_value,
+        valor_atual_valor=valor_atual_valor,
         baseline=baseline,
     )
 
@@ -86,7 +86,7 @@ def test_robust_zscore():
 
     print(
         "valor_atual:",
-        result.valor_atual_value
+        result.valor_atual_valor
     )
 
     print(
@@ -126,7 +126,7 @@ def test_robust_zscore_valor_proximo_baseline():
         0,
     )
 
-    baseline_values = [
+    baseline_valors = [
         98.0,
         98.1,
         97.9,
@@ -138,8 +138,8 @@ def test_robust_zscore_valor_proximo_baseline():
 
     measurements = []
 
-    for index, value in enumerate(
-        baseline_values
+    for index, valor in enumerate(
+        baseline_valors
     ):
         measurements.append(
             Medicao(
@@ -154,10 +154,10 @@ def test_robust_zscore_valor_proximo_baseline():
                 ),
 
                 parametro=Vitalparametro.SPO2,
-                value=value,
-                unit="%",
+                valor=valor,
+                unidade="%",
 
-                source=FonteDados.SIMULATOR,
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -176,10 +176,10 @@ def test_robust_zscore_valor_proximo_baseline():
 
             parametro=Vitalparametro.SPO2,
 
-            value=98.05,
-            unit="%",
+            valor=98.05,
+            unidade="%",
 
-            source=FonteDados.SIMULATOR,
+            fonte=FonteDados.SIMULADOR,
             qualidade_sinal=1.0,
         )
     )
@@ -191,7 +191,7 @@ def test_robust_zscore_valor_proximo_baseline():
     )
 
     result = calculate_robust_zscore(
-        valor_atual_value=98.05,
+        valor_atual_valor=98.05,
         baseline=baseline,
     )
 
@@ -219,7 +219,7 @@ def test_robust_zscore_mad_zero():
         0,
     )
 
-    values = [
+    valors = [
         98.0,
         98.0,
         98.0,
@@ -231,7 +231,7 @@ def test_robust_zscore_mad_zero():
 
     measurements = []
 
-    for index, value in enumerate(values):
+    for index, valor in enumerate(valors):
 
         measurements.append(
             Medicao(
@@ -246,10 +246,10 @@ def test_robust_zscore_mad_zero():
                 ),
 
                 parametro=Vitalparametro.SPO2,
-                value=value,
-                unit="%",
+                valor=valor,
+                unidade="%",
 
-                source=FonteDados.SIMULATOR,
+                fonte=FonteDados.SIMULADOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -261,7 +261,7 @@ def test_robust_zscore_mad_zero():
     )
 
     result = calculate_robust_zscore(
-        valor_atual_value=94.0,
+        valor_atual_valor=94.0,
         baseline=baseline,
     )
 

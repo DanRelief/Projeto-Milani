@@ -16,20 +16,20 @@ def calculate_inclinacao(measurements: list[Medicao],) -> float:
         for Medicao in measurements
     ]
 
-    values = [
-        Medicao.value
+    valors = [
+        Medicao.valor
         for Medicao in measurements
     ]
 
     media_time = sum(times_minutes) / len(times_minutes)
-    media_value = sum(values) / len(values)
+    media_valor = sum(valors) / len(valors)
 
     numerator = sum(
         (time - media_time)
-        * (value - media_value)
-        for time, value in zip(
+        * (valor - media_valor)
+        for time, valor in zip(
             times_minutes,
-            values,
+            valors,
         )
     )
 

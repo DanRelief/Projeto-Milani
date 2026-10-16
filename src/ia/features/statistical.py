@@ -1,4 +1,4 @@
-from statistics import media, mediana, pdesvio_padraoev
+from statistics import mean, median, pstdev
 
 
 def calculate_media(
@@ -9,7 +9,7 @@ def calculate_media(
             "Não é possível calcular média de uma lista vazia."
         )
 
-    return media(values)
+    return mean(values)
 
 
 def calculate_mediana(
@@ -20,7 +20,7 @@ def calculate_mediana(
             "Não é possível calcular medianaa de uma lista vazia."
         )
 
-    return mediana(values)
+    return median(values)
 
 
 def calculate_min(
@@ -56,7 +56,7 @@ def calculate_desvio_padrao(
     if len(values) == 1:
         return 0.0
 
-    return pdesvio_padraoev(values)
+    return pstdev(values)
 
 
 def calculate_delta(

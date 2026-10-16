@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from application.buffering.vital_buffer import VitalBuffer
-from domain.measurement import Vitalparametro
-from infrastructure.simulation.sinais_vitais_simulacao import (
+from src.domain.measurement import Vitalparametro
+from src.infrastructure.simulation.sinais_vitais_simulacao import (
     SimuladorSinaisVitais,
 )
 
@@ -44,11 +44,11 @@ def test_simulacao_e_buffer():
     )
 
     temperature = buffer.get_all(
-        Vitalparametro.TEMPERATURE
+        Vitalparametro.TEMPERATURA
     )
 
     pressure = buffer.get_all(
-        Vitalparametro.media_ARTERIAL_PRESSURE
+        Vitalparametro.PRESSAO_ARTERIAL_MEDIA
     )
 
     print()
@@ -64,13 +64,13 @@ def test_simulacao_e_buffer():
 
     print(
         "Última temperatura:",
-        buffer.latest(Vitalparametro.TEMPERATURE)
+        buffer.latest(Vitalparametro.TEMPERATURA)
     )
 
     print(
         "Última pressão:",
         buffer.latest(
-            Vitalparametro.media_ARTERIAL_PRESSURE
+            Vitalparametro.PRESSAO_ARTERIAL_MEDIA
         )
     )
 

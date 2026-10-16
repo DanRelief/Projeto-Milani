@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from domain.measurement import (
+from src.domain.measurement import (
     FonteDados,
     Medicao,
     Vitalparametro,
@@ -34,26 +34,26 @@ class SimuladorSinaisVitais:
 
         self.baseline = {
             Vitalparametro.SPO2: 98.0,
-            Vitalparametro.TEMPERATURE: 37.5,
-            Vitalparametro.media_ARTERIAL_PRESSURE: 85.0,
+            Vitalparametro.TEMPERATURA: 37.5,
+            Vitalparametro.PRESSAO_ARTERIAL_MEDIA: 85.0,
         }
 
         self.units = {
             Vitalparametro.SPO2: "%",
-            Vitalparametro.TEMPERATURE: "°C",
-            Vitalparametro.media_ARTERIAL_PRESSURE: "mmHg",
+            Vitalparametro.TEMPERATURA: "°C",
+            Vitalparametro.PRESSAO_ARTERIAL_MEDIA: "mmHg",
         }
 
     @staticmethod
     def _limit(
-        value: float,
+        valor: float,
         minimo: float,
         maximo: float,
     ) -> float:
 
         return max(
             minimo,
-            min(maximo, value),
+            min(maximo, valor),
         )
 
     def _generate_spo2(self) -> float:
@@ -62,7 +62,7 @@ class SimuladorSinaisVitais:
             Vitalparametro.SPO2
         ]
 
-        value = (
+        valor = (
             baseline
             + 0.25 * math.sin(
                 self.passo / 8.0
@@ -73,21 +73,21 @@ class SimuladorSinaisVitais:
             )
         )
 
-        value = self._limit(
-            value,
+        valor = self._limit(
+            valor,
             0.0,
             100.0,
         )
 
-        return round(value, 2)
+        return round(valor, 2)
 
     def _generate_temperature(self) -> float:
 
         baseline = self.baseline[
-            Vitalparametro.TEMPERATURE
+            Vitalparametro.TEMPERATURA
         ]
 
-        value = (
+        valor = (
             baseline
             + 0.08 * math.sin(
                 self.passo / 15.0
@@ -98,15 +98,15 @@ class SimuladorSinaisVitais:
             )
         )
 
-        return round(value, 2)
+        return round(valor, 2)
 
     def _generate_pressure(self) -> float:
 
         baseline = self.baseline[
-            Vitalparametro.media_ARTERIAL_PRESSURE
+            Vitalparametro.PRESSAO_ARTERIAL_MEDIA
         ]
 
-        value = (
+        valor = (
             baseline
             + 2.0 * math.sin(
                 self.passo / 7.0
@@ -117,13 +117,13 @@ class SimuladorSinaisVitais:
             )
         )
 
-        value = self._limit(
-            value,
+        valor = self._limit(
+            valor,
             20.0,
             200.0,
         )
 
-        return round(value, 2)
+        return round(valor, 2)
 
     def generate_snapshot(
         self,
@@ -137,41 +137,33 @@ class SimuladorSinaisVitais:
 
         self.passo += 1
 
-        values = {
+        valors = {
             Vitalparametro.SPO2:
                 self._generate_spo2(),
 
-            Vitalparametro.TEMPERATURE:
+            Vitalparametro.TEMPERATURA:
                 self._generate_temperature(),
 
-            Vitalparametro.media_ARTERIAL_PRESSURE:
+            Vitalparametro.PRESSAO_ARTERIAL_MEDIA:
                 self._generate_pressure(),
         }
 
         measurements = []
 
-        for parametro, value in values.items():
+        for parametro, valor in valors.items():
 
-            Medicao = Medicao(
+            medicao = Medicao(
                 id_paciente=self.id_paciente,
                 id_sessao=self.id_sessao,
                 data_hora=data_hora,
                 parametro=parametro,
-                value=value,
-                unit=self.units[parametro],
-                source=FonteDados.SIMULATOR,
-                qualidade_sinal=round(
-                    self.random.uniform(
-                        0.95,
-                        1.0,
-                    ),
-                    2,
-                ),
+                valor=valor,
+                unidade=self.units[parametro],
+                fonte=FonteDados.SIMULADOR,
+                qualidade_sinal=round(self.random.uniform(0.95,1.0,),2),
             )
 
-            measurements.append(
-                Medicao
-            )
+            measurements.append(medicao)
 
         return measurements
 

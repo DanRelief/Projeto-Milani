@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 
 
-class ParametroVital(str, Enum):
+class Vitalparametro(str, Enum):
     SPO2 = "spo2"
     TEMPERATURA = "temperatura"
     PRESSAO_ARTERIAL_MEDIA = "pressao_arterial_media"
@@ -24,7 +24,7 @@ class Medicao:
 
     data_hora: datetime
 
-    parametro: ParametroVital
+    parametro: Vitalparametro
     valor: float
     unidade: str
 

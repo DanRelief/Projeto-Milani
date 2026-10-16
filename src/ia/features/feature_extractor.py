@@ -49,7 +49,7 @@ class FeatureExtractor:
                 )
 
         values = [
-            Medicao.value
+            Medicao.valor
             for Medicao in measurements
         ]
 

@@ -91,7 +91,7 @@ class _CarrosselDeImagens(QWidget):
         super().__init__(parent)
         self.setObjectName("image_panel")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setminimoWidth(360)
+        self.setMinimumWidth(360)
 
         self._images = [QPixmap(str(path)) for path in image_paths if path.exists()]
         self._labels = [_ImagemComCorte(self), _ImagemComCorte(self)]
@@ -181,7 +181,7 @@ class TelaLogin(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("M.I.S.A. - Acesso ao Sistema")
-        self.setminimoSize(900, 560)
+        self.setMinimumSize(900, 560)
         self.resize(1120, 680)
 
         self.tabs = QTabWidget()
@@ -191,9 +191,9 @@ class TelaLogin(QMainWindow):
         self.tab_cadastro = self._criar_aba_cadastro()
         self.tabs.addTab(self.tab_login, "Fazer Login")
         self.tabs.addTab(self.tab_cadastro, "Criar Conta")
-        self.tabs.setvalor_atualIndex(0)
+        self.tabs.setCurrentIndex(0)
         self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.tabs.setmaximoWidth(760)
+        self.tabs.setMaximumWidth(760)
 
         assets_dir = Path(__file__).resolve().parents[2] / "assets"
         image_paths = sorted(
@@ -258,8 +258,8 @@ class TelaLogin(QMainWindow):
         self.login_role_combo = QComboBox()
         self.login_role_combo.setView(QListView())
         self.login_role_combo.setObjectName("role_selector")
-        self.login_role_combo.setminimoHeight(28)
-        self.login_role_combo.setminimoWidth(110)
+        self.login_role_combo.setMinimumHeight(28)
+        self.login_role_combo.setMinimumWidth(110)
         self.login_role_combo.addItem("Aluno", "student")
         self.login_role_combo.addItem("Docente", "teacher")
 
@@ -274,13 +274,13 @@ class TelaLogin(QMainWindow):
         self.login_identifier_input = QLineEdit()
         self.login_identifier_input.setObjectName("login_field")
         self.login_identifier_input.setPlaceholderText("Digite seu RA")
-        self.login_identifier_input.setminimoHeight(40)
+        self.login_identifier_input.setMinimumHeight(40)
 
         self.login_password_input = QLineEdit()
         self.login_password_input.setObjectName("login_field")
         self.login_password_input.setPlaceholderText("Digite sua senha")
         self.login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.login_password_input.setminimoHeight(40)
+        self.login_password_input.setMinimumHeight(40)
 
         self._login_identifier_label = QLabel("RA")
         self._login_identifier_label.setObjectName("field_label")
@@ -296,7 +296,7 @@ class TelaLogin(QMainWindow):
         cadastro_button = QPushButton("Não tem login? Cadastre-se")
         cadastro_button.setObjectName("register_link")
         cadastro_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        cadastro_button.clicked.connect(lambda: self.tabs.setvalor_atualIndex(1))
+        cadastro_button.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
 
         form_layout = QVBoxLayout()
         form_layout.setSpacing(7)
@@ -324,7 +324,7 @@ class TelaLogin(QMainWindow):
         self.identifier_input = self.login_identifier_input
         self.password_input = self.login_password_input
         self._identifier_label = self._login_identifier_label
-        self.login_role_combo.valor_atualIndexChanged.connect(self._update_identifier_field)
+        self.login_role_combo.currentIndexChanged.connect(self._update_identifier_field)
         return widget
 
     def _criar_aba_cadastro(self) -> QWidget:
@@ -340,23 +340,23 @@ class TelaLogin(QMainWindow):
         self.cad_role_combo.setObjectName("role_selector")
         self.cad_role_combo.addItem("Aluno", "student")
         self.cad_role_combo.addItem("Docente", "teacher")
-        self.cad_role_combo.setminimoHeight(32)
+        self.cad_role_combo.setMinimumHeight(32)
 
         self.cad_name_input = QLineEdit()
         self.cad_name_input.setObjectName("login_field")
         self.cad_name_input.setPlaceholderText("Digite seu nome completo")
-        self.cad_name_input.setminimoHeight(40)
+        self.cad_name_input.setMinimumHeight(40)
 
         self.cad_identifier_input = QLineEdit()
         self.cad_identifier_input.setObjectName("login_field")
         self.cad_identifier_input.setPlaceholderText("Digite seu RA")
-        self.cad_identifier_input.setminimoHeight(40)
+        self.cad_identifier_input.setMinimumHeight(40)
 
         self.cad_password_input = QLineEdit()
         self.cad_password_input.setObjectName("login_field")
         self.cad_password_input.setPlaceholderText("Crie uma senha")
         self.cad_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.cad_password_input.setminimoHeight(40)
+        self.cad_password_input.setMinimumHeight(40)
 
         role_label = QLabel("TIPO DE ACESSO")
         role_label.setObjectName("field_label_small")
@@ -375,7 +375,7 @@ class TelaLogin(QMainWindow):
         voltar_button = QPushButton("Voltar para o login")
         voltar_button.setObjectName("register_link")
         voltar_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        voltar_button.clicked.connect(lambda: self.tabs.setvalor_atualIndex(0))
+        voltar_button.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
 
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(32, 26, 32, 24)
@@ -395,7 +395,7 @@ class TelaLogin(QMainWindow):
         layout.addSpacing(18)
         layout.addWidget(voltar_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        self.cad_role_combo.valor_atualIndexChanged.connect(
+        self.cad_role_combo.currentIndexChanged.connect(
             self._update_registration_identifier_field
         )
         return widget
@@ -553,7 +553,7 @@ class TelaLogin(QMainWindow):
     def _handle_login(self) -> None:
         identifier = self.login_identifier_input.text().strip()
         password = self.login_password_input.text()
-        role = self.login_role_combo.valor_atualData()
+        role = self.login_role_combo.currentData()
 
         if not identifier or not password:
             QMessageBox.warning(
@@ -574,7 +574,7 @@ class TelaLogin(QMainWindow):
         nome = self.cad_name_input.text().strip()
         identifier = self.cad_identifier_input.text().strip()
         password = self.cad_password_input.text()
-        role = self.cad_role_combo.valor_atualData()
+        role = self.cad_role_combo.currentData()
 
         if not nome or not identifier or not password:
             QMessageBox.warning(

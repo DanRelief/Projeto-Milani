@@ -27,10 +27,10 @@ class CadastrarProcedimentoDialog(DialogoPadrao):
 
         self.data_input = QDateEdit()
         self.data_input.setCalendarPopup(True)
-        self.data_input.setDate(QDate.valor_atualDate())
+        self.data_input.setDate(QDate.currentDate())
 
         self.hora_input = QTimeEdit()
-        self.hora_input.setTime(QTime.valor_atualTime())
+        self.hora_input.setTime(QTime.currentTime())
 
         self.observacoes_input = QTextEdit()
         self.observacoes_input.setPlaceholderText(
