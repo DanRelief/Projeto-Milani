@@ -50,7 +50,7 @@ class EditarPacienteDialog(DialogoPadrao):
             QMessageBox.warning(self, "Campo obrigatório", "Informe o nome.")
             return False
 
-        if self.especie_combo.currentIndex() == -1:
+        if self.especie_combo.valor_atualIndex() == -1:
             QMessageBox.warning(self,"Campo obrigatório","Selecione a espécie.")
             return False
 
@@ -65,7 +65,7 @@ class EditarPacienteDialog(DialogoPadrao):
 
         return {
             "nome": self.nome_input.text().strip(),
-            "especie": self.especie_combo.currentText(),
+            "especie": self.especie_combo.valor_atualText(),
             "idade": int(self.idade_input.text()),
             "porte": porte.property("valor") if porte else "Médio",
         }
@@ -80,7 +80,7 @@ class EditarPacienteDialog(DialogoPadrao):
 
         indice = seletor.findText(valor_atual)
         if indice >= 0:
-            seletor.setCurrentIndex(indice)
+            seletor.setvalor_atualIndex(indice)
 
         self.layout_conteudo.addWidget(seletor)
 

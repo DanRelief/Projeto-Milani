@@ -3,10 +3,10 @@ from datetime import datetime
 from enum import Enum
 
 
-class VitalParameter(str, Enum):
+class Vitalparametro(str, Enum):
     SPO2 = "spo2"
     TEMPERATURE = "temperature"
-    MEAN_ARTERIAL_PRESSURE = "mean_arterial_pressure"
+    MEDIA_ARTERIAL_PRESSURE = "media_arterial_pressure"
 
 
 class DataSource(str, Enum):
@@ -19,35 +19,35 @@ class DataSource(str, Enum):
 
 @dataclass
 class Measurement:
-    patient_id: str
-    session_id: str
+    id_paciente: str
+    id_sessao: str
 
-    timestamp: datetime
+    data_hora: datetime
 
-    parameter: VitalParameter
+    parametro: Vitalparametro
     value: float
     unit: str
 
     source: DataSource
 
-    signal_quality: float | None = None
-    is_valid: bool = True
+    qualidade_sinal: float | None = None
+    valido: bool = True
 
     def __post_init__(self):
 
-        if not self.patient_id.strip():
+        if not self.id_paciente.strip():
             raise ValueError(
-                "patient_id não pode ser vazio."
+                "id_paciente não pode ser vazio."
             )
 
-        if not self.session_id.strip():
+        if not self.id_sessao.strip():
             raise ValueError(
-                "session_id não pode ser vazio."
+                "id_sessao não pode ser vazio."
             )
 
-        if self.signal_quality is not None:
+        if self.qualidade_sinal is not None:
 
-            if not 0.0 <= self.signal_quality <= 1.0:
+            if not 0.0 <= self.qualidade_sinal <= 1.0:
                 raise ValueError(
-                    "signal_quality deve estar entre 0.0 e 1.0."
+                    "qualidade_sinal deve estar entre 0.0 e 1.0."
                 )

@@ -12,7 +12,7 @@ class HistoricoDialog(DialogoPadrao):
         self.historico_view = QTextBrowser()
         self.historico_view.setReadOnly(True)
 
-        self.historico_view.setMinimumHeight(260)
+        self.historico_view.setminimoHeight(260)
 
         self.historico_view.setStyleSheet("""
             QTextBrowser {

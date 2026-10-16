@@ -21,7 +21,7 @@ class DialogCadastrarAnimal(QDialog):
         super().__init__(parent)
         self.usuario_logado = usuario_logado
         self.setWindowTitle("Cadastrar Novo Animal - M.I.S.A.")
-        self.setMinimumSize(400, 440)
+        self.setminimoSize(400, 440)
 
         layout = QVBoxLayout()
         title = QLabel("Cadastro de Animal")
@@ -101,9 +101,9 @@ class DialogCadastrarAnimal(QDialog):
             "nome": nome,
             "especie": especie,
             "idade": self.input_idade.value(),
-            "porte": self.combo_porte.currentData(),  # Retorna 'pequeno', 'medio' ou 'grande'
+            "porte": self.combo_porte.valor_atualData(),  # Retorna 'pequeno', 'medio' ou 'grande'
             "procedimento": procedimento,
-            "estado_clinico": self.combo_estado.currentData(),  # Retorna 'estavel', 'moderado' ou 'grave'
+            "estado_clinico": self.combo_estado.valor_atualData(),  # Retorna 'estavel', 'moderado' ou 'grave'
             "ultima_medicacao": self.input_medicacao.text().strip() or None,
             "quantidade": self.input_quantidade.text().strip() or None,
             "responsavel_aplicacao": usuario_id  # ID da FK referente à tabela usuarios

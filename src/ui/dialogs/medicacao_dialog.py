@@ -45,10 +45,10 @@ class CadastrarMedicacaoDialog(DialogoPadrao):
 
         self.data_input = QDateEdit()
         self.data_input.setCalendarPopup(True)
-        self.data_input.setDate(QDate.currentDate())
+        self.data_input.setDate(QDate.valor_atualDate())
 
         self.hora_input = QTimeEdit()
-        self.hora_input.setTime(QTime.currentTime())
+        self.hora_input.setTime(QTime.valor_atualTime())
 
         self._adicionar_campo("Data:", self.data_input)
         self._adicionar_campo("Hora:", self.hora_input)
@@ -90,7 +90,7 @@ class CadastrarMedicacaoDialog(DialogoPadrao):
             "tipo": "Medicação",
             "medicacao": self.medicacao_input.text().strip(),
             "quantidade": self.quantidade_input.text().strip(),
-            "unidade": self.unidade_combo.currentText(),
+            "unidade": self.unidade_combo.valor_atualText(),
             "medico_medicacao": self.medico_input.text().strip(),
             "data": self.data_input.date().toString("dd/MM/yyyy"),
             "hora": self.hora_input.time().toString("HH:mm"),

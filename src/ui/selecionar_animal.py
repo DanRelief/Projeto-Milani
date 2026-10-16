@@ -12,7 +12,7 @@ class DialogSelecionarAnimal(QDialog):
         super().__init__(parent)
         self.usuario_logado = usuario_logado
         self.setWindowTitle("Selecionar Animal para Monitorar")
-        self.setMinimumSize(650, 350)
+        self.setminimoSize(650, 350)
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Selecione um animal cadastrado na rede:"))
@@ -44,7 +44,7 @@ class DialogSelecionarAnimal(QDialog):
             self.tabela.setItem(i, 5, QTableWidgetItem(a["nome_responsavel"]))
 
     def _confirmar_selecao(self):
-        row = self.tabela.currentRow()
+        row = self.tabela.valor_atualRow()
         if row < 0:
             QMessageBox.warning(self, "Aviso", "Selecione um animal na tabela.")
             return

@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from domain.measurement import (
     DataSource,
     Measurement,
-    VitalParameter,
+    Vitalparametro,
 )
 
 
@@ -21,45 +21,45 @@ class SimuladorSinaisVitais:
 
     def __init__(
         self,
-        patient_id: str,
-        session_id: str,
+        id_paciente: str,
+        id_sessao: str,
         seed: int | None = None,
     ):
-        self.patient_id = patient_id
-        self.session_id = session_id
+        self.id_paciente = id_paciente
+        self.id_sessao = id_sessao
 
         self.random = random.Random(seed)
 
         self.passo = 0
 
         self.baseline = {
-            VitalParameter.SPO2: 98.0,
-            VitalParameter.TEMPERATURE: 37.5,
-            VitalParameter.MEAN_ARTERIAL_PRESSURE: 85.0,
+            Vitalparametro.SPO2: 98.0,
+            Vitalparametro.TEMPERATURE: 37.5,
+            Vitalparametro.media_ARTERIAL_PRESSURE: 85.0,
         }
 
         self.units = {
-            VitalParameter.SPO2: "%",
-            VitalParameter.TEMPERATURE: "°C",
-            VitalParameter.MEAN_ARTERIAL_PRESSURE: "mmHg",
+            Vitalparametro.SPO2: "%",
+            Vitalparametro.TEMPERATURE: "°C",
+            Vitalparametro.media_ARTERIAL_PRESSURE: "mmHg",
         }
 
     @staticmethod
     def _limit(
         value: float,
-        minimum: float,
-        maximum: float,
+        minimo: float,
+        maximo: float,
     ) -> float:
 
         return max(
-            minimum,
-            min(maximum, value),
+            minimo,
+            min(maximo, value),
         )
 
     def _generate_spo2(self) -> float:
 
         baseline = self.baseline[
-            VitalParameter.SPO2
+            Vitalparametro.SPO2
         ]
 
         value = (
@@ -84,7 +84,7 @@ class SimuladorSinaisVitais:
     def _generate_temperature(self) -> float:
 
         baseline = self.baseline[
-            VitalParameter.TEMPERATURE
+            Vitalparametro.TEMPERATURE
         ]
 
         value = (
@@ -103,7 +103,7 @@ class SimuladorSinaisVitais:
     def _generate_pressure(self) -> float:
 
         baseline = self.baseline[
-            VitalParameter.MEAN_ARTERIAL_PRESSURE
+            Vitalparametro.media_ARTERIAL_PRESSURE
         ]
 
         value = (
@@ -127,40 +127,40 @@ class SimuladorSinaisVitais:
 
     def generate_snapshot(
         self,
-        timestamp: datetime | None = None,
+        data_hora: datetime | None = None,
     ) -> list[Measurement]:
 
-        if timestamp is None:
-            timestamp = datetime.now(
+        if data_hora is None:
+            data_hora = datetime.now(
                 HORARIO_BRASIL
             )
 
         self.passo += 1
 
         values = {
-            VitalParameter.SPO2:
+            Vitalparametro.SPO2:
                 self._generate_spo2(),
 
-            VitalParameter.TEMPERATURE:
+            Vitalparametro.TEMPERATURE:
                 self._generate_temperature(),
 
-            VitalParameter.MEAN_ARTERIAL_PRESSURE:
+            Vitalparametro.media_ARTERIAL_PRESSURE:
                 self._generate_pressure(),
         }
 
         measurements = []
 
-        for parameter, value in values.items():
+        for parametro, value in values.items():
 
             measurement = Measurement(
-                patient_id=self.patient_id,
-                session_id=self.session_id,
-                timestamp=timestamp,
-                parameter=parameter,
+                id_paciente=self.id_paciente,
+                id_sessao=self.id_sessao,
+                data_hora=data_hora,
+                parametro=parametro,
                 value=value,
-                unit=self.units[parameter],
+                unit=self.units[parametro],
                 source=DataSource.SIMULATOR,
-                signal_quality=round(
+                qualidade_sinal=round(
                     self.random.uniform(
                         0.95,
                         1.0,
@@ -209,7 +209,7 @@ class SimuladorSinaisVitais:
             interval_seconds,
         ):
 
-            timestamp = (
+            data_hora = (
                 start_time
                 + timedelta(
                     seconds=elapsed_seconds
@@ -217,7 +217,7 @@ class SimuladorSinaisVitais:
             )
 
             snapshot = self.generate_snapshot(
-                timestamp
+                data_hora
             )
 
             measurements.extend(
@@ -232,20 +232,20 @@ class SinalVitalSimulacao(QObject):
 
     def __init__(
         self,
-        patient_id: str,
-        session_id: str,
+        id_paciente: str,
+        id_sessao: str,
         parent=None,
         seed: int | None = None,
     ):
         super().__init__(parent)
 
         self.simulator = SimuladorSinaisVitais(
-            patient_id=patient_id,
-            session_id=session_id,
+            id_paciente=id_paciente,
+            id_sessao=id_sessao,
             seed=seed,
         )
 
-        self.current_time = datetime.now(
+        self.valor_atual_time = datetime.now(
             HORARIO_BRASIL
         )
 
@@ -266,7 +266,7 @@ class SinalVitalSimulacao(QObject):
 
         measurements = (
             self.simulator.generate_snapshot(
-                self.current_time
+                self.valor_atual_time
             )
         )
 
@@ -274,6 +274,6 @@ class SinalVitalSimulacao(QObject):
             measurements
         )
 
-        self.current_time += timedelta(
+        self.valor_atual_time += timedelta(
             seconds=2
         )

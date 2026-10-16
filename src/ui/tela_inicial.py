@@ -43,7 +43,7 @@ class TelaInicial(QMainWindow):
         self.usuario = usuario
         self.setWindowTitle("M.I.S.A - Tela Inicial")
         self.resize(1024, 720)
-        self.setMinimumSize(900, 650)
+        self.setminimoSize(900, 650)
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -511,17 +511,17 @@ class TelaInicial(QMainWindow):
             return
         serie_referencia = self.series_map["spo2"][0]
         index = serie_referencia.count()
-        horario = medicao[0].timestamp.strftime("%H:%M:%S")
+        horario = medicao[0].data_hora.strftime("%H:%M:%S")
 
         # Dicionário dinâmico com fallback seguro (pega do atributo da medição ou usa 0.0)
         mapa_series = {
         "spo2": "spo2",
         "temperature": "temperatura",
-        "mean_arterial_pressure": "pressao_arterial",
+        "media_arterial_pressure": "pressao_arterial",
         }
 
         for medicoes in medicao:
-            chave = mapa_series.get(medicoes.parameter.value)
+            chave = mapa_series.get(medicoes.parametro.value)
 
             if chave is None:
                 continue
@@ -578,12 +578,12 @@ class TelaInicial(QMainWindow):
         if self.simulator is not None:
             self.simulator.stop()
 
-        patient_id = str(animal["id"])
-        session_id = str(uuid4())
+        id_paciente = str(animal["id"])
+        id_sessao = str(uuid4())
 
         self.simulator = SinalVitalSimulacao(
-            patient_id=patient_id,
-            session_id=session_id,
+            id_paciente=id_paciente,
+            id_sessao=id_sessao,
             parent=self,
         )
 

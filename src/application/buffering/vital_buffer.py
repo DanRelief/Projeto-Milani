@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from domain.measurement import (
     Measurement,
-    VitalParameter,
+    Vitalparametro,
 )
 
 
@@ -11,19 +11,19 @@ class VitalBuffer:
 
     def __init__(
         self,
-        patient_id: str,
-        session_id: str,
+        id_paciente: str,
+        id_sessao: str,
         max_minutes: int = 30,
     ):
-        self.patient_id = patient_id
-        self.session_id = session_id
+        self.id_paciente = id_paciente
+        self.id_sessao = id_sessao
 
         self.max_duration = timedelta(
             minutes=max_minutes
         )
 
         self._data: dict[
-            VitalParameter,
+            Vitalparametro,
             deque[Measurement]
         ] = defaultdict(deque)
 
@@ -33,33 +33,33 @@ class VitalBuffer:
     ) -> None:
 
         if (
-            measurement.patient_id
-            != self.patient_id
+            measurement.id_paciente
+            != self.id_paciente
         ):
             raise ValueError(
                 "Measurement pertence a outro paciente."
             )
 
         if (
-            measurement.session_id
-            != self.session_id
+            measurement.id_sessao
+            != self.id_sessao
         ):
             raise ValueError(
                 "Measurement pertence a outra sessão."
             )
 
         measurements = self._data[
-            measurement.parameter
+            measurement.parametro
         ]
 
         if measurements:
-            last_timestamp = (
-                measurements[-1].timestamp
+            last_data_hora = (
+                measurements[-1].data_hora
             )
 
             if (
-                measurement.timestamp
-                < last_timestamp
+                measurement.data_hora
+                < last_data_hora
             ):
                 raise ValueError(
                     "Measurement fora de ordem temporal."
@@ -70,7 +70,7 @@ class VitalBuffer:
         )
 
         self._remove_old_measurements(
-            measurement.timestamp
+            measurement.data_hora
         )
 
     def add_many(
@@ -84,11 +84,11 @@ class VitalBuffer:
 
     def _remove_old_measurements(
         self,
-        reference_timestamp,
+        reference_data_hora,
     ) -> None:
 
         cutoff = (
-            reference_timestamp
+            reference_data_hora
             - self.max_duration
         )
 
@@ -99,59 +99,59 @@ class VitalBuffer:
             while (
                 measurements
                 and
-                measurements[0].timestamp
+                measurements[0].data_hora
                 < cutoff
             ):
                 measurements.popleft()
 
     def get_all(
         self,
-        parameter: VitalParameter,
+        parametro: Vitalparametro,
     ) -> list[Measurement]:
 
         return list(
             self._data.get(
-                parameter,
+                parametro,
                 []
             )
         )
 
     def get_recent(
         self,
-        parameter: VitalParameter,
+        parametro: Vitalparametro,
         minutes: float,
     ) -> list[Measurement]:
 
         measurements = self._data.get(
-            parameter,
+            parametro,
             []
         )
 
         if not measurements:
             return []
 
-        latest_timestamp = (
-            measurements[-1].timestamp
+        latest_data_hora = (
+            measurements[-1].data_hora
         )
 
         cutoff = (
-            latest_timestamp
+            latest_data_hora
             - timedelta(minutes=minutes)
         )
 
         return [
             measurement
             for measurement in measurements
-            if measurement.timestamp >= cutoff
+            if measurement.data_hora >= cutoff
         ]
 
     def latest(
         self,
-        parameter: VitalParameter,
+        parametro: Vitalparametro,
     ) -> Measurement | None:
 
         measurements = self._data.get(
-            parameter
+            parametro
         )
 
         if not measurements:
@@ -161,12 +161,12 @@ class VitalBuffer:
 
     def count(
         self,
-        parameter: VitalParameter,
+        parametro: Vitalparametro,
     ) -> int:
 
         return len(
             self._data.get(
-                parameter,
+                parametro,
                 []
             )
         )
