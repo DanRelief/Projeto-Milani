@@ -1,6 +1,6 @@
 class InferencePipeline:
 
-    def process(self, measurement):
+    def process(self, Medicao):
 
         validar_medicao()
 

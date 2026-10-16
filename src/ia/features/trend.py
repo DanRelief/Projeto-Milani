@@ -1,7 +1,7 @@
-from src.domain.measurement import Measurement
+from src.domain.measurement import Medicao
 
 
-def calculate_inclinacao(measurements: list[Measurement],) -> float:
+def calculate_inclinacao(measurements: list[Medicao],) -> float:
 
     if len(measurements) < 2:
         return 0.0
@@ -10,15 +10,15 @@ def calculate_inclinacao(measurements: list[Measurement],) -> float:
 
     times_minutes = [
         (
-            measurement.data_hora
+            Medicao.data_hora
             - first_data_hora
         ).total_seconds() / 60.0
-        for measurement in measurements
+        for Medicao in measurements
     ]
 
     values = [
-        measurement.value
-        for measurement in measurements
+        Medicao.value
+        for Medicao in measurements
     ]
 
     media_time = sum(times_minutes) / len(times_minutes)

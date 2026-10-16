@@ -2,7 +2,7 @@ from collections import defaultdict, deque
 from datetime import timedelta
 
 from domain.measurement import (
-    Measurement,
+    Medicao,
     Vitalparametro,
 )
 
@@ -24,32 +24,32 @@ class VitalBuffer:
 
         self._data: dict[
             Vitalparametro,
-            deque[Measurement]
+            deque[Medicao]
         ] = defaultdict(deque)
 
     def add(
         self,
-        measurement: Measurement,
+        Medicao: Medicao,
     ) -> None:
 
         if (
-            measurement.id_paciente
+            Medicao.id_paciente
             != self.id_paciente
         ):
             raise ValueError(
-                "Measurement pertence a outro paciente."
+                "Medicao pertence a outro paciente."
             )
 
         if (
-            measurement.id_sessao
+            Medicao.id_sessao
             != self.id_sessao
         ):
             raise ValueError(
-                "Measurement pertence a outra sessão."
+                "Medicao pertence a outra sessão."
             )
 
         measurements = self._data[
-            measurement.parametro
+            Medicao.parametro
         ]
 
         if measurements:
@@ -58,28 +58,28 @@ class VitalBuffer:
             )
 
             if (
-                measurement.data_hora
+                Medicao.data_hora
                 < last_data_hora
             ):
                 raise ValueError(
-                    "Measurement fora de ordem temporal."
+                    "Medicao fora de ordem temporal."
                 )
 
         measurements.append(
-            measurement
+            Medicao
         )
 
         self._remove_old_measurements(
-            measurement.data_hora
+            Medicao.data_hora
         )
 
     def add_many(
         self,
-        measurements: list[Measurement],
+        measurements: list[Medicao],
     ) -> None:
 
-        for measurement in measurements:
-            self.add(measurement)
+        for Medicao in measurements:
+            self.add(Medicao)
 
 
     def _remove_old_measurements(
@@ -107,7 +107,7 @@ class VitalBuffer:
     def get_all(
         self,
         parametro: Vitalparametro,
-    ) -> list[Measurement]:
+    ) -> list[Medicao]:
 
         return list(
             self._data.get(
@@ -120,7 +120,7 @@ class VitalBuffer:
         self,
         parametro: Vitalparametro,
         minutes: float,
-    ) -> list[Measurement]:
+    ) -> list[Medicao]:
 
         measurements = self._data.get(
             parametro,
@@ -140,15 +140,15 @@ class VitalBuffer:
         )
 
         return [
-            measurement
-            for measurement in measurements
-            if measurement.data_hora >= cutoff
+            Medicao
+            for Medicao in measurements
+            if Medicao.data_hora >= cutoff
         ]
 
     def latest(
         self,
         parametro: Vitalparametro,
-    ) -> Measurement | None:
+    ) -> Medicao | None:
 
         measurements = self._data.get(
             parametro

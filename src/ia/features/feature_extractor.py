@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from src.domain.measurement import Measurement,Vitalparametro
+from src.domain.measurement import Medicao,Vitalparametro
 from src.ia.features.statistical import (
     calculate_delta,
     calculate_max,
@@ -32,7 +32,7 @@ class CaracteristicasJanela:
 
 class FeatureExtractor:
 
-    def extract(self,measurements: list[Measurement],window_minutes: float,) -> CaracteristicasJanela:
+    def extract(self,measurements: list[Medicao],window_minutes: float,) -> CaracteristicasJanela:
 
         if not measurements:
             raise ValueError(
@@ -41,16 +41,16 @@ class FeatureExtractor:
 
         parametro = measurements[0].parametro
 
-        for measurement in measurements:
-            if measurement.parametro != parametro:
+        for Medicao in measurements:
+            if Medicao.parametro != parametro:
                 raise ValueError(
                     "Todas as medições da janela devem "
                     "pertencer ao mesmo parâmetro."
                 )
 
         values = [
-            measurement.value
-            for measurement in measurements
+            Medicao.value
+            for Medicao in measurements
         ]
 
         return CaracteristicasJanela(

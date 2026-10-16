@@ -3,14 +3,14 @@ from datetime import datetime
 from enum import Enum
 
 
-class Vitalparametro(str, Enum):
+class ParametroVital(str, Enum):
     SPO2 = "spo2"
-    TEMPERATURE = "temperature"
-    MEDIA_ARTERIAL_PRESSURE = "media_arterial_pressure"
+    TEMPERATURA = "temperatura"
+    PRESSAO_ARTERIAL_MEDIA = "pressao_arterial_media"
 
 
-class DataSource(str, Enum):
-    SIMULATOR = "simulator"
+class FonteDados(str, Enum):
+    SIMULADOR = "simulador"
     CSV = "csv"
     MONITOR = "monitor"
     WIFI = "wifi"
@@ -18,20 +18,20 @@ class DataSource(str, Enum):
 
 
 @dataclass
-class Measurement:
+class Medicao:
     id_paciente: str
     id_sessao: str
 
     data_hora: datetime
 
-    parametro: Vitalparametro
-    value: float
-    unit: str
+    parametro: ParametroVital
+    valor: float
+    unidade: str
 
-    source: DataSource
+    fonte: FonteDados
 
     qualidade_sinal: float | None = None
-    valido: bool = True
+    valida: bool = True
 
     def __post_init__(self):
 
@@ -46,7 +46,6 @@ class Measurement:
             )
 
         if self.qualidade_sinal is not None:
-
             if not 0.0 <= self.qualidade_sinal <= 1.0:
                 raise ValueError(
                     "qualidade_sinal deve estar entre 0.0 e 1.0."

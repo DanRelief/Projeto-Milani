@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 
 from src.domain.measurement import (
-    DataSource,
-    Measurement,
+    FonteDados,
+    Medicao,
     Vitalparametro,
 )
 
@@ -35,7 +35,7 @@ def test_features_spo2():
     for index, value in enumerate(values):
 
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
 
@@ -48,7 +48,7 @@ def test_features_spo2():
                 value=value,
                 unit="%",
 
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -223,7 +223,7 @@ def test_inclinacao_constante():
 
     for index in range(5):
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
                 data_hora=start
@@ -231,7 +231,7 @@ def test_inclinacao_constante():
                 parametro=Vitalparametro.SPO2,
                 value=98.0,
                 unit="%",
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )

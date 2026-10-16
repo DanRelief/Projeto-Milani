@@ -9,8 +9,8 @@ from src.ia.baseline.robust_zscore import (
 )
 
 from src.domain.measurement import (
-    DataSource,
-    Measurement,
+    FonteDados,
+    Medicao,
     Vitalparametro,
 )
 
@@ -44,7 +44,7 @@ def test_robust_zscore():
     for index, value in enumerate(values):
 
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
 
@@ -60,7 +60,7 @@ def test_robust_zscore():
                 value=value,
                 unit="%",
 
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )
@@ -142,7 +142,7 @@ def test_robust_zscore_valor_proximo_baseline():
         baseline_values
     ):
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
 
@@ -157,13 +157,13 @@ def test_robust_zscore_valor_proximo_baseline():
                 value=value,
                 unit="%",
 
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )
 
     measurements.append(
-        Measurement(
+        Medicao(
             id_paciente="DOG_001",
             id_sessao="SESSION_001",
 
@@ -179,7 +179,7 @@ def test_robust_zscore_valor_proximo_baseline():
             value=98.05,
             unit="%",
 
-            source=DataSource.SIMULATOR,
+            source=FonteDados.SIMULATOR,
             qualidade_sinal=1.0,
         )
     )
@@ -234,7 +234,7 @@ def test_robust_zscore_mad_zero():
     for index, value in enumerate(values):
 
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
 
@@ -249,7 +249,7 @@ def test_robust_zscore_mad_zero():
                 value=value,
                 unit="%",
 
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )

@@ -4,8 +4,8 @@ from src.ia.baseline.rolling import (
     calculate_rolling_baseline,
 )
 from src.domain.measurement import (
-    DataSource,
-    Measurement,
+    FonteDados,
+    Medicao,
     Vitalparametro,
 )
 
@@ -39,7 +39,7 @@ def test_rolling_mediana_e_mad():
     for index, value in enumerate(values):
 
         measurements.append(
-            Measurement(
+            Medicao(
                 id_paciente="DOG_001",
                 id_sessao="SESSION_001",
 
@@ -55,7 +55,7 @@ def test_rolling_mediana_e_mad():
                 value=value,
                 unit="%",
 
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=1.0,
             )
         )

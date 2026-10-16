@@ -6,8 +6,8 @@ from zoneinfo import ZoneInfo
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from domain.measurement import (
-    DataSource,
-    Measurement,
+    FonteDados,
+    Medicao,
     Vitalparametro,
 )
 
@@ -128,7 +128,7 @@ class SimuladorSinaisVitais:
     def generate_snapshot(
         self,
         data_hora: datetime | None = None,
-    ) -> list[Measurement]:
+    ) -> list[Medicao]:
 
         if data_hora is None:
             data_hora = datetime.now(
@@ -152,14 +152,14 @@ class SimuladorSinaisVitais:
 
         for parametro, value in values.items():
 
-            measurement = Measurement(
+            Medicao = Medicao(
                 id_paciente=self.id_paciente,
                 id_sessao=self.id_sessao,
                 data_hora=data_hora,
                 parametro=parametro,
                 value=value,
                 unit=self.units[parametro],
-                source=DataSource.SIMULATOR,
+                source=FonteDados.SIMULATOR,
                 qualidade_sinal=round(
                     self.random.uniform(
                         0.95,
@@ -170,7 +170,7 @@ class SimuladorSinaisVitais:
             )
 
             measurements.append(
-                measurement
+                Medicao
             )
 
         return measurements
@@ -180,7 +180,7 @@ class SimuladorSinaisVitais:
         duration_minutes: int,
         interval_seconds: int = 5,
         start_time: datetime | None = None,
-    ) -> list[Measurement]:
+    ) -> list[Medicao]:
 
         if duration_minutes <= 0:
             raise ValueError(

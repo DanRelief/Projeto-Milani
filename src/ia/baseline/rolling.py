@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from statistics import mediana
-from src.domain.measurement import Measurement, Vitalparametro
+from src.domain.measurement import Medicao, Vitalparametro
 
 
 @dataclass
@@ -36,7 +36,7 @@ def calculate_mad(values: list[float],mediana_value: float | None = None,) -> fl
         absolute_deviations
     )
 
-def calculate_rolling_baseline(measurements: list[Measurement],exclude_valor_atual: bool = True,minimo_samples: int = 5) -> BaselineStats:
+def calculate_rolling_baseline(measurements: list[Medicao],exclude_valor_atual: bool = True,minimo_samples: int = 5) -> BaselineStats:
 
     if not measurements:
         raise ValueError(
@@ -45,8 +45,8 @@ def calculate_rolling_baseline(measurements: list[Measurement],exclude_valor_atu
 
     parametro = measurements[0].parametro
 
-    for measurement in measurements:
-        if measurement.parametro != parametro:
+    for Medicao in measurements:
+        if Medicao.parametro != parametro:
             raise ValueError(
                 "Todas as medições devem pertencer "
                 "ao mesmo parâmetro."
@@ -64,8 +64,8 @@ def calculate_rolling_baseline(measurements: list[Measurement],exclude_valor_atu
         )
 
     values = [
-        measurement.value
-        for measurement in baseline_measurements
+        Medicao.value
+        for Medicao in baseline_measurements
     ]
 
     mediana_value = mediana(values)
