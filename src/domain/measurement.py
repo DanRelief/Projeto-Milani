@@ -4,49 +4,14 @@ from enum import Enum
 
 
 class ParametroVital(str, Enum):
-    SPO2 = "spo2"
+    OXIGENIO = "oxigenio"
+    PRESSAO_ARTERIAL = "pressao_arterial"
     TEMPERATURA = "temperatura"
-    PRESSAO_ARTERIAL_MEDIA = "pressao_arterial_media"
-
-
-class FonteDados(str, Enum):
-    SIMULADOR = "simulador"
-    CSV = "csv"
-    MONITOR = "monitor"
-    WIFI = "wifi"
-    BLUETOOTH = "bluetooth"
 
 
 @dataclass
-class Medicao:
-    id_paciente: str
-    id_sessao: str
-
-    data_hora: datetime
-
-    parametro: ParametroVital
-    valor: float
-    unidade: str
-
-    fonte: FonteDados
-
-    qualidade_sinal: float | None = None
-    valida: bool = True
-
-    def __post_init__(self):
-
-        if not self.id_paciente.strip():
-            raise ValueError(
-                "id_paciente não pode ser vazio."
-            )
-
-        if not self.id_sessao.strip():
-            raise ValueError(
-                "id_sessao não pode ser vazio."
-            )
-
-        if self.qualidade_sinal is not None:
-            if not 0.0 <= self.qualidade_sinal <= 1.0:
-                raise ValueError(
-                    "qualidade_sinal deve estar entre 0.0 e 1.0."
-                )
+class Measurement:
+    tempomedicao: datetime
+    oxigenio: float          # SpO2 (%)
+    pressao_arterial: float  # (mmHg)
+    temperatura: float       # (°C)
