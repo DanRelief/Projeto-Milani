@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from src.infrastructure.database import salvar_observacao_docente
 
+from PySide6.QtPrintSupport import QPrinter
+
 from PySide6.QtCore import (
     QEasingCurve,
     QParallelAnimationGroup,
@@ -11,7 +13,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -25,7 +27,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
-    QTextEdit
+    QTextEdit,
+    QFileDialog
 )
 from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
 
@@ -466,6 +469,132 @@ class TelaInicial(QMainWindow):
 
         return conteudo
 
+    def exportar_relatorio_pdf(self) -> None:
+        """Gera um documento PDF profissional com o gráfico de monitoramento e o histórico."""
+        if self.paciente.get("nome") == "---":
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal antes de exportar o relatório."
+            )
+            return
+
+        # 1. Abre a caixa de diálogo para o aluno escolher a pasta onde salvar
+        nome_sugerido = f"Relatorio_MISA_{self.paciente['nome']}.pdf"
+        caminho_arquivo, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Relatório em PDF", nome_sugerido, "Arquivos PDF (*.pdf)"
+        )
+
+        if not caminho_arquivo:
+            return  # Aluno cancelou a caixa de diálogo
+
+        if not caminho_arquivo.endswith(".pdf"):
+            caminho_arquivo += ".pdf"
+
+        try:
+            # 2. Captura a imagem do gráfico atual
+            pixmap_grafico = self.grafico_view.grab()
+            # Salva temporariamente a imagem como PNG em memória base64 ou pasta temporária
+            caminho_img_temp = "temp_grafico_misa.png"
+            pixmap_grafico.save(caminho_img_temp, "PNG")
+
+            # 3. Monta o histórico formatado em tabela HTML
+            linhas_historico_html = ""
+            if not self.historico:
+                linhas_historico_html = "<tr><td colspan='4'>Nenhum procedimento ou medicação cadastrada até o momento.</td></tr>"
+            else:
+                for reg in self.historico:
+                    data_hora = f"{reg.get('data', '')} {reg.get('hora', '')}".strip()
+                    if reg.get("tipo") == "Procedimento":
+                        detalhe = f"Procedimento: {reg.get('procedimento', '-')}"
+                        resp = reg.get("medico_procedimento", "-")
+                    else:
+                        detalhe = f"Medicação: {reg.get('medicacao', '-')} (Qtd: {reg.get('quantidade', '')} {reg.get('unidade', '')})"
+                        resp = reg.get("medico_medicacao", "-")
+
+                    linhas_historico_html += f"""
+                        <tr>
+                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{data_hora}</td>
+                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'><b>{reg.get('tipo', 'Registro')}</b></td>
+                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{detalhe}</td>
+                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{resp}</td>
+                        </tr>
+                    """
+
+            # 4. Estrutura o HTML Completo do Relatório
+            observacao = self.paciente.get("observacao_docente") or "Nenhuma observação registrada."
+            
+            conteudo_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #1a1a1a; }}
+                    h1 {{ color: #08b9df; border-bottom: 2px solid #08b9df; padding-bottom: 5px; }}
+                    h2 {{ color: #1f4d3a; margin-top: 20px; font-size: 16px; }}
+                    .info-box {{ background-color: #f7f9fc; border: 1px solid #c7d0d9; padding: 12px; border-radius: 5px; margin-bottom: 15px; }}
+                    table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }}
+                    th {{ background-color: #287a55; color: white; padding: 8px; text-align: left; }}
+                </style>
+            </head>
+            <body>
+                <h1>M.I.S.A. - Relatório de Monitoramento Animal</h1>
+                
+                <div class="info-box">
+                    <b>Paciente:</b> {self.paciente['nome']} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Espécie:</b> {self.paciente['especie']} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Idade:</b> {self.paciente['idade']} anos &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Porte:</b> {self.paciente['porte']}<br>
+                    <b>Responsável:</b> {self.paciente['medico_procedimento']}<br>
+                    <b>Emitido por:</b> {self.usuario.get('name', 'Aluno')} ({self.usuario.get('role', 'Aluno')})
+                </div>
+
+                <h2>1. Gráfico de Sinais Vitais em Tempo Real</h2>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="{caminho_img_temp}" width="600" />
+                </div>
+
+                <h2>2. Observações do Docente</h2>
+                <div class="info-box">
+                    <i>{observacao}</i>
+                </div>
+
+                <h2>3. Histórico de Procedimentos e Medicações</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data / Hora</th>
+                            <th>Tipo</th>
+                            <th>Descrição / Detalhes</th>
+                            <th>Responsável</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {linhas_historico_html}
+                    </tbody>
+                </table>
+            </body>
+            </html>
+            """
+
+            # 5. Renderiza e Imprime o Documento no Arquivo PDF
+            documento = QTextDocument()
+            documento.setHtml(conteudo_html)
+
+            printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+            printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+            printer.setOutputFileName(caminho_arquivo)
+
+            documento.print_(printer)
+
+            QMessageBox.information(
+                self,
+                "Sucesso",
+                f"Relatório PDF gerado com sucesso!\n\nSalvo em:\n{caminho_arquivo}",
+            )
+
+        except Exception as err:
+            QMessageBox.critical(
+                self, "Erro na Geracao", f"Não foi possível gerar o PDF: {err}"
+            )
+
     def criar_card_paciente(self) -> QFrame:
         card = self.criar_card()
         layout = QVBoxLayout(card)
@@ -731,11 +860,19 @@ class TelaInicial(QMainWindow):
 
         layout.addWidget(self.historico_label)
 
+        linha_botoes = QHBoxLayout()
+
+        self.btn_exportar_pdf = QPushButton("📄 Baixar PDF (Gráfico + Histórico)")
+        self.btn_exportar_pdf.setObjectName("btn_card_animal")
+        self.btn_exportar_pdf.clicked.connect(self.exportar_relatorio_pdf)
+        linha_botoes.addWidget(self.btn_exportar_pdf)
+
         ver_mais = QPushButton("Ver Mais")
         ver_mais.setObjectName("botao_ver_mais")
         ver_mais.clicked.connect(self.ver_historico_completo)
-        layout.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
+        linha_botoes.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
 
+        layout.addLayout(linha_botoes)
         return card
 
     def editar_paciente(self) -> None:
