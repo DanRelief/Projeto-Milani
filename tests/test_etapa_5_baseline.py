@@ -6,7 +6,7 @@ from src.ia.baseline.rolling import (
 from src.domain.measurement import (
     FonteDados,
     Medicao,
-    Vitalparametro,
+    ParametroVital,
 )
 
 
@@ -50,7 +50,7 @@ def test_rolling_mediana_e_mad():
                     )
                 ),
 
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
 
                 valor=valor,
                 unidade="%",

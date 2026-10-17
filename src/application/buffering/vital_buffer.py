@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from src.domain.measurement import (
     Medicao,
-    Vitalparametro,
+    ParametroVital,
 )
 
 
@@ -23,7 +23,7 @@ class VitalBuffer:
         )
 
         self._data: dict[
-            Vitalparametro,
+            ParametroVital,
             deque[Medicao]
         ] = defaultdict(deque)
 
@@ -106,7 +106,7 @@ class VitalBuffer:
 
     def get_all(
         self,
-        parametro: Vitalparametro,
+        parametro: ParametroVital,
     ) -> list[Medicao]:
 
         return list(
@@ -118,7 +118,7 @@ class VitalBuffer:
 
     def get_recent(
         self,
-        parametro: Vitalparametro,
+        parametro: ParametroVital,
         minutes: float,
     ) -> list[Medicao]:
 
@@ -147,7 +147,7 @@ class VitalBuffer:
 
     def latest(
         self,
-        parametro: Vitalparametro,
+        parametro: ParametroVital,
     ) -> Medicao | None:
 
         measurements = self._data.get(
@@ -161,7 +161,7 @@ class VitalBuffer:
 
     def count(
         self,
-        parametro: Vitalparametro,
+        parametro: ParametroVital,
     ) -> int:
 
         return len(

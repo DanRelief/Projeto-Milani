@@ -11,7 +11,7 @@ from src.ia.baseline.robust_zscore import (
 from src.domain.measurement import (
     FonteDados,
     Medicao,
-    Vitalparametro,
+    ParametroVital,
 )
 
 
@@ -55,7 +55,7 @@ def test_robust_zscore():
                     )
                 ),
 
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
 
                 valor=valor,
                 unidade="%",
@@ -153,7 +153,7 @@ def test_robust_zscore_valor_proximo_baseline():
                     )
                 ),
 
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
                 valor=valor,
                 unidade="%",
 
@@ -174,7 +174,7 @@ def test_robust_zscore_valor_proximo_baseline():
                 )
             ),
 
-            parametro=Vitalparametro.SPO2,
+            parametro=ParametroVital.SPO2,
 
             valor=98.05,
             unidade="%",
@@ -245,7 +245,7 @@ def test_robust_zscore_mad_zero():
                     )
                 ),
 
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
                 valor=valor,
                 unidade="%",
 

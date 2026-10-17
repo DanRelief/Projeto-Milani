@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from statistics import median
-from src.domain.measurement import Medicao, Vitalparametro
+from src.domain.measurement import Medicao, ParametroVital
 
 
 @dataclass
 class BaselineStats:
-    parametro: Vitalparametro
+    parametro: ParametroVital
 
     count: int
 

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from src.domain.measurement import (
     FonteDados,
     Medicao,
-    Vitalparametro,
+    ParametroVital,
 )
 
 from src.ia.features.feature_extractor import (
@@ -44,7 +44,7 @@ def test_features_spo2():
                     + timedelta(minutes=index)
                 ),
 
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
                 valor=valor,
                 unidade="%",
 
@@ -132,9 +132,9 @@ def test_features_com_simulador():
     extractor = FeatureExtractor()
 
     for parametro in [
-        Vitalparametro.SPO2,
-        Vitalparametro.TEMPERATURA,
-        Vitalparametro.PRESSAO_ARTERIAL_MEDIA,
+        ParametroVital.SPO2,
+        ParametroVital.TEMPERATURA,
+        ParametroVital.PRESSAO_ARTERIAL_MEDIA,
     ]:
 
         window = buffer.get_recent(
@@ -175,7 +175,7 @@ def test_features_com_simulador():
         )
 
         print(
-            "medianaa:",
+            "mediana:",
             round(
                 features.mediana,
                 3
@@ -228,7 +228,7 @@ def test_inclinacao_constante():
                 id_sessao="SESSION_001",
                 data_hora=start
                 + timedelta(minutes=index),
-                parametro=Vitalparametro.SPO2,
+                parametro=ParametroVital.SPO2,
                 valor=98.0,
                 unidade="%",
                 fonte=FonteDados.SIMULADOR,
