@@ -1,6 +1,8 @@
 from pathlib import Path
 from uuid import uuid4
 
+from src.infrastructure.database import salvar_observacao_docente
+
 from PySide6.QtCore import (
     QEasingCurve,
     QParallelAnimationGroup,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QTextEdit
 )
 from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
 
@@ -34,6 +37,8 @@ from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 
 from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
+
+from src.infrastructure.database import criar_sessao_monitoramento, salvar_medicao_sinal_vital
 
 class TelaInicial(QMainWindow):
     logout_requested = Signal()
@@ -58,6 +63,9 @@ class TelaInicial(QMainWindow):
             "quantidade_medicacao": "---",
             "estado_clinico": "---",
         }
+
+        self.is_teacher = usuario.get("role") in ["Docente", "teacher"]
+        self.sessao_ativa_id = None # Armazena o UUID da sessão em sessoes_monitoramento
 
         self.historico = []
 
@@ -129,6 +137,81 @@ class TelaInicial(QMainWindow):
         self._aplicar_estilos()
         self.setCentralWidget(central)
         self.montar_menu_lateral(central, usuario)
+
+    def _carregar_animal_para_monitoramento(self, animal: dict, e_proprietario: bool) -> None:
+        self.paciente["id"] = animal["id"]
+        self.paciente["nome"] = animal["nome"]
+        self.paciente["especie"] = animal["especie"]
+        self.paciente["idade"] = animal["idade"]
+        self.paciente["porte"] = animal["porte"].capitalize()
+        self.paciente["procedimento"] = animal["procedimento"]
+        self.paciente["estado_clinico"] = animal["estado_clinico"].capitalize()
+        self.paciente["ultima_medicacao"] = animal.get("ultima_medicacao") or "Nenhuma"
+        self.paciente["quantidade_medicacao"] = animal.get("quantidade") or "N/A"
+        self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
+        self.paciente["observacao_docente"] = animal.get("observacao_docente") or ""
+
+        self.atualizar_informacoes_paciente()
+
+        if hasattr(self, "campo_observacao"):
+            self.campo_observacao.setText(self.paciente["observacao_docente"])
+
+        user_id_logado = self.usuario.get("id") or self.usuario.get("usuario_id")
+        try:
+            e_dono = (int(user_id_logado) == int(responsavel_db)) if (user_id_logado and responsavel_db) else False
+        except (ValueError, TypeError):
+            e_dono = False
+
+        pode_alterar = self.is_teacher or e_dono or e_proprietario
+
+        self.cadastrar_label.show()
+        if self.is_teacher:
+            self.btn_cadastrar.show()
+
+        if pode_alterar:
+            self.btn_editar_paciente.show()
+            self.btn_procedimento.show()
+            self.btn_medicacao.show()
+            self.btn_editar_paciente.setEnabled(True)
+            self.btn_procedimento.setEnabled(True)
+            self.btn_medicacao.setEnabled(True)
+        else:
+            self.btn_editar_paciente.hide()
+            self.btn_procedimento.hide()
+            self.btn_medicacao.hide()
+
+    def update_chart(self, medicao) -> None:
+        primeira_serie = self.series_map["freq_cardiaca"][0]
+        index = primeira_serie.count()
+
+        valores = {
+            "oxigenio": (getattr(medicao, "oxigenio", getattr(medicao, "spo2", 0.0)), "%"),
+            "pressao_arterial": (getattr(medicao, "pressao_arterial", 0.0), "mmHg"),
+            "temperatura": (getattr(medicao, "temperatura", 0.0), "°C"),
+        }
+
+        # Atualiza a interface gráfica
+        for key, (val, und) in valores.items():
+            if key in self.series_map:
+                series = self.series_map[key][0]
+                series.append(float(index), float(val))
+
+            # Se houver uma sessão ativa, persiste as medições no MySQL
+            if self.sessao_ativa_id:
+                salvar_medicao_sinal_vital(
+                    sessao_id=self.sessao_ativa_id,
+                    parametro=key,
+                    valor=float(val),
+                    unidade=und,
+                    fonte="simulador"
+                )
+
+        # Ajuste do eixo X do gráfico
+        JANELA_MAXIMA = 30
+        if index >= JANELA_MAXIMA:
+            self.axis_x.setRange(index - JANELA_MAXIMA + 1, index)
+        else:
+            self.axis_x.setRange(0, JANELA_MAXIMA)
 
     def montar_menu_lateral(
         self, central: QWidget, usuario: dict[str, str]
@@ -359,7 +442,7 @@ class TelaInicial(QMainWindow):
         card_historico = self.criar_card_historico()
         card_alertas = self.criar_card_alerta_ia()
 
-        card_paciente.setFixedHeight(340)
+        card_paciente.setFixedHeight(480)
         card_historico.setFixedHeight(240)
         card_monitoramento.setFixedHeight(420)
         card_alertas.setFixedHeight(140)
@@ -390,7 +473,11 @@ class TelaInicial(QMainWindow):
         layout.setSpacing(6)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Informações do Paciente (inicialmente vazias)
+        # 1. Recupera o papel do usuário logado (com suporte a 'teacher' do MySQL)
+        user_role = str(self.usuario.get("role", "")).strip().lower()
+        self.is_teacher = user_role in ["teacher", "docente", "professor", "admin"]
+
+        # Informações do Paciente
         self.informacoes_paciente = QLabel()
         self.informacoes_paciente.setObjectName("informacoes_paciente")
         self.informacoes_paciente.setTextFormat(Qt.TextFormat.RichText)
@@ -403,7 +490,7 @@ class TelaInicial(QMainWindow):
 
         self.btn_editar_paciente = QPushButton("Editar")
         self.btn_editar_paciente.setObjectName("botao_acao")
-        self.btn_editar_paciente.setEnabled(False)  # Desabilitado até carregar um paciente
+        self.btn_editar_paciente.hide()
         self.btn_editar_paciente.clicked.connect(self.editar_paciente)
         linha_informacoes.addWidget(
             self.btn_editar_paciente,
@@ -412,48 +499,102 @@ class TelaInicial(QMainWindow):
 
         layout.addLayout(linha_informacoes)
 
-        # Seção AÇÕES DO ANIMAL
-        cadastrar_label = QLabel("AÇÕES DO ANIMAL")
-        cadastrar_label.setObjectName("titulo_cadastrar")
-        cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(cadastrar_label)
+        # 2. Caixa de Observação do Docente
+        label_obs = QLabel("<b>Observações do Docente:</b>")
+        label_obs.setStyleSheet("color: #08b9df; font-size: 13px; margin-top: 4px;")
+        layout.addWidget(label_obs)
 
-        # 1. Linha com os botões de Gestão do Animal (Cadastrar / Monitorar)
+        self.campo_observacao = QTextEdit()
+        self.campo_observacao.setPlaceholderText("Escreva observações e orientações para os alunos...")
+        self.campo_observacao.setMaximumHeight(50)
+        self.campo_observacao.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #c7d0d9;
+                border-radius: 5px;
+                padding: 4px;
+                font-size: 12px;
+                background-color: #ffffff;
+                color: #1a1a1a;
+            }
+        """)
+
+        if not self.is_teacher:
+            self.campo_observacao.setReadOnly(True)
+            self.campo_observacao.setPlaceholderText("Nenhuma observação cadastrada pelo docente.")
+
+        layout.addWidget(self.campo_observacao)
+
+        if self.is_teacher:
+            self.btn_salvar_obs = QPushButton("Salvar Observação")
+            self.btn_salvar_obs.setObjectName("btn_card_animal")
+            self.btn_salvar_obs.setFixedHeight(26)
+            self.btn_salvar_obs.clicked.connect(self._salvar_observacao_docente)
+            layout.addWidget(self.btn_salvar_obs, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # 3. Seção AÇÕES DO ANIMAL
+        self.cadastrar_label = QLabel("AÇÕES DO ANIMAL")
+        self.cadastrar_label.setObjectName("titulo_cadastrar")
+        self.cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.cadastrar_label)
+
+        # Linha com os Botões de Gestão
         linha_botoes_animais = QHBoxLayout()
+        linha_botoes_animais.addStretch()
+
         self.btn_cadastrar = QPushButton("Cadastrar Animal")
         self.btn_cadastrar.setObjectName("btn_card_animal")
         self.btn_cadastrar.clicked.connect(self._abrir_cadastro_animal)
+        
+        # REGRA DE EXIBIÇÃO: Se for docente, exibe o botão imediatamente
+        if self.is_teacher:
+            self.btn_cadastrar.show()
+            linha_botoes_animais.addWidget(self.btn_cadastrar)
+        else:
+            self.btn_cadastrar.hide()
 
         self.btn_monitorar = QPushButton("Monitorar Animal")
         self.btn_monitorar.setObjectName("btn_card_animal")
         self.btn_monitorar.clicked.connect(self._abrir_selecao_animal)
-
-        linha_botoes_animais.addStretch()
-        linha_botoes_animais.addWidget(self.btn_cadastrar)
         linha_botoes_animais.addWidget(self.btn_monitorar)
-        linha_botoes_animais.addStretch()
 
+        linha_botoes_animais.addStretch()
         layout.addLayout(linha_botoes_animais)
 
-        # 2. Linha com os botões de Lançamentos Clínicos (Procedimento / Medicação)
+        # Linha com os Botões Clínicos (Iniciam ocultos)
         linha_cadastro_eventos = QHBoxLayout()
-        btn_procedimento = QPushButton("Procedimento")
-        btn_procedimento.setObjectName("btn_card_animal")
-        btn_procedimento.clicked.connect(self.cadastrar_procedimento)
+        self.btn_procedimento = QPushButton("Procedimento")
+        self.btn_procedimento.setObjectName("btn_card_animal")
+        self.btn_procedimento.hide()
+        self.btn_procedimento.clicked.connect(self.cadastrar_procedimento)
 
-        btn_medicacao = QPushButton("Medicação")
-        btn_medicacao.setObjectName("btn_card_animal")
-        btn_medicacao.clicked.connect(self.cadastrar_medicacao)
+        self.btn_medicacao = QPushButton("Medicação")
+        self.btn_medicacao.setObjectName("btn_card_animal")
+        self.btn_medicacao.hide()
+        self.btn_medicacao.clicked.connect(self.cadastrar_medicacao)
 
         linha_cadastro_eventos.addStretch()
-        linha_cadastro_eventos.addWidget(btn_procedimento)
-        linha_cadastro_eventos.addWidget(btn_medicacao)
+        linha_cadastro_eventos.addWidget(self.btn_procedimento)
+        linha_cadastro_eventos.addWidget(self.btn_medicacao)
         linha_cadastro_eventos.addStretch()
 
         layout.addLayout(linha_cadastro_eventos)
 
         return card
 
+    def _salvar_observacao_docente(self) -> None:
+        animal_id = self.paciente.get("id")
+        if not animal_id or self.paciente.get("nome") == "---":
+            QMessageBox.warning(self, "Aviso", "Selecione um animal antes de salvar observações.")
+            return
+
+        texto_obs = self.campo_observacao.toPlainText().strip()
+        
+        # Persiste diretamente na tabela 'animais' do MySQL
+        if salvar_observacao_docente(animal_id, texto_obs):
+            self.paciente["observacao_docente"] = texto_obs
+            QMessageBox.information(self, "Sucesso", "Observação registrada e salva no banco de dados com sucesso!")
+        else:
+            QMessageBox.critical(self, "Erro", "Não foi possível salvar a observação no banco de dados.")
 
     def criar_card_monitoramento(self) -> QFrame:
         card = self.criar_card()
@@ -530,43 +671,6 @@ class TelaInicial(QMainWindow):
         dlg.animal_selecionado.connect(self._carregar_animal_para_monitoramento)
         dlg.exec()
 
-    def _carregar_animal_para_monitoramento(self, animal: dict, e_proprietario: bool) -> None:
-        self.paciente["nome"] = animal["nome"]
-        self.paciente["especie"] = animal["especie"]
-        self.paciente["idade"] = animal["idade"]
-        self.paciente["porte"] = animal["porte"].capitalize()
-        self.paciente["procedimento"] = animal["procedimento"]
-        self.paciente["estado_clinico"] = animal["estado_clinico"].capitalize()
-        self.paciente["ultima_medicacao"] = animal.get("ultima_medicacao") or "Nenhuma"
-        self.paciente["quantidade_medicacao"] = animal.get("quantidade") or "N/A"
-        self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
-
-        self.atualizar_informacoes_paciente()
-        if self.simulator is not None:
-            self.simulator.stop()
-
-        id_paciente = str(animal["id"])
-        id_sessao = str(uuid4())
-
-        self.simulator = SinalVitalSimulacao(
-            id_paciente=id_paciente,
-            id_sessao=id_sessao,
-            parent=self,
-        )
-
-        self.simulator.measurement_generated.connect(self.update_chart)
-        self.simulator.start()
-
-        pode_editar = e_proprietario or (self.usuario.get("role") == "Docente")
-        self.btn_editar_paciente.setEnabled(pode_editar)
-
-        if not pode_editar:
-            QMessageBox.information(
-                self,
-                "Modo Somente Leitura",
-                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro usuário')}. "
-                "Alterações nos dados estão desabilitadas.",
-            )
 
     def atualizar_informacoes_paciente(self) -> None:
         self.informacoes_paciente.setText(

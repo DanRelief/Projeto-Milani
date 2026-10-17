@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS animais (
         ON UPDATE CASCADE
 );
 
+ALTER TABLE animais 
+ADD COLUMN observacao_docente TEXT DEFAULT NULL AFTER quantidade;
+
 -- 3. Sessões de monitoramento
 CREATE TABLE IF NOT EXISTS sessoes_monitoramento (
     id VARCHAR(36) PRIMARY KEY,
