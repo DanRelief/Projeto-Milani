@@ -33,3 +33,116 @@ CREATE TABLE IF NOT EXISTS animais (
         ON DELETE RESTRICT 
         ON UPDATE CASCADE
 );
+
+-- 3. Sessões de monitoramento
+CREATE TABLE IF NOT EXISTS sessoes_monitoramento (
+    id VARCHAR(36) PRIMARY KEY,
+
+    animal_id INT NOT NULL,
+    iniciado_por INT NOT NULL,
+
+    data_hora_inicio DATETIME(6) NOT NULL,
+    data_hora_fim DATETIME(6) DEFAULT NULL,
+
+    status ENUM(
+        'ativa',
+        'encerrada',
+        'cancelada'
+    ) NOT NULL DEFAULT 'ativa',
+
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_sessao_animal
+        FOREIGN KEY (animal_id)
+        REFERENCES animais(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_sessao_usuario
+        FOREIGN KEY (iniciado_por)
+        REFERENCES usuarios(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);
+
+-- 4. Smedições dos sinais vitais dos animais
+CREATE TABLE IF NOT EXISTS medicoes_sinais_vitais (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    sessao_id VARCHAR(36) NOT NULL,
+
+    data_hora DATETIME(6) NOT NULL,
+
+    parametro VARCHAR(50) NOT NULL,
+
+    valor DOUBLE NOT NULL,
+    unidade VARCHAR(20) NOT NULL,
+
+    fonte VARCHAR(30) NOT NULL,
+
+    qualidade_sinal DOUBLE DEFAULT NULL,
+
+    valida BOOLEAN NOT NULL DEFAULT TRUE,
+
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_medicao_sessao
+        FOREIGN KEY (sessao_id)
+        REFERENCES sessoes_monitoramento(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_medicao_sessao_parametro_data (
+        sessao_id,
+        parametro,
+        data_hora
+    )
+);
+-- 5. Eventos e alertas de mudanças 
+CREATE TABLE IF NOT EXISTS eventos_alerta (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_alerta VARCHAR(36) NOT NULL,
+
+    sessao_id VARCHAR(36) NOT NULL,
+
+    tipo_evento ENUM(
+        'abertura',
+        'encerramento'
+    ) NOT NULL,
+
+    parametro VARCHAR(50) NOT NULL,
+
+    data_hora DATETIME(6) NOT NULL,
+
+    estado_monitoramento VARCHAR(30) NOT NULL,
+
+    valor_atual DOUBLE NOT NULL,
+
+    z_robusto DOUBLE DEFAULT NULL,
+
+    ewma DOUBLE DEFAULT NULL,
+
+    inclinacao DOUBLE DEFAULT NULL,
+
+    qualidade_sinal DOUBLE DEFAULT NULL,
+
+    motivo TEXT DEFAULT NULL,
+
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_evento_alerta_sessao
+        FOREIGN KEY (sessao_id)
+        REFERENCES sessoes_monitoramento(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_evento_alerta_id (
+        id_alerta
+    ),
+
+    INDEX idx_evento_alerta_sessao_data (
+        sessao_id,
+        data_hora
+    )
+);
