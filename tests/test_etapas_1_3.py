@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from application.buffering.vital_buffer import VitalBuffer
-from src.domain.measurement import Vitalparametro
+from src.domain.measurement import ParametroVital
 from src.infrastructure.simulation.sinais_vitais_simulacao import (
     SimuladorSinaisVitais,
 )
@@ -40,15 +40,15 @@ def test_simulacao_e_buffer():
     buffer.add_many(measurements)
 
     spo2 = buffer.get_all(
-        Vitalparametro.SPO2
+        ParametroVital.SPO2
     )
 
     temperature = buffer.get_all(
-        Vitalparametro.TEMPERATURA
+        ParametroVital.TEMPERATURA
     )
 
     pressure = buffer.get_all(
-        Vitalparametro.PRESSAO_ARTERIAL_MEDIA
+        ParametroVital.PRESSAO_ARTERIAL_MEDIA
     )
 
     print()
@@ -59,18 +59,18 @@ def test_simulacao_e_buffer():
     print()
     print(
         "Última SpO2:",
-        buffer.latest(Vitalparametro.SPO2)
+        buffer.latest(ParametroVital.SPO2)
     )
 
     print(
         "Última temperatura:",
-        buffer.latest(Vitalparametro.TEMPERATURA)
+        buffer.latest(ParametroVital.TEMPERATURA)
     )
 
     print(
         "Última pressão:",
         buffer.latest(
-            Vitalparametro.PRESSAO_ARTERIAL_MEDIA
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA
         )
     )
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from src.domain.measurement import Vitalparametro
+from src.domain.measurement import ParametroVital
 
 
 
@@ -20,7 +20,7 @@ class EventoAlerta:
     id_paciente: str
     id_sessao: str
 
-    parametro: Vitalparametro
+    parametro: ParametroVital
 
     data_hora: datetime
 

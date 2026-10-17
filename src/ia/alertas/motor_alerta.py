@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from src.domain.alert import EventoAlerta,TipoEventoAlerta
-from src.domain.measurement import Vitalparametro 
+from src.domain.measurement import ParametroVital 
 from src.ia.rules.motor_regras import EstadoMonitoramento
 
 @dataclass(frozen=True)
@@ -11,7 +11,7 @@ class EntradaMotorAlertas:
     id_paciente: str
     id_sessao: str
 
-    parametro: Vitalparametro
+    parametro: ParametroVital
 
     data_hora: datetime
 
@@ -32,7 +32,7 @@ class EntradaMotorAlertas:
 class MotorAlertas:
 
     def __init__(self):
-        self._alertas_ativos: dict[tuple[str,str,Vitalparametro,],str,] = {}
+        self._alertas_ativos: dict[tuple[str,str,ParametroVital,],str,] = {}
 
     def processar(self,entrada: EntradaMotorAlertas) -> EventoAlerta | None:
 
@@ -122,7 +122,7 @@ class MotorAlertas:
 
         return None
 
-    def tem_alerta_ativo(self,id_paciente: str,id_sessao: str,parametro: Vitalparametro,) -> bool:
+    def tem_alerta_ativo(self,id_paciente: str,id_sessao: str,parametro: ParametroVital,) -> bool:
 
         chave = (id_paciente,id_sessao,parametro,)
         return chave in self._alertas_ativos

@@ -13,7 +13,7 @@ from src.domain.alert import (
 )
 
 from src.domain.measurement import (
-    Vitalparametro,
+    ParametroVital,
 )
 
 from src.ia.rules.motor_regras import (
@@ -32,7 +32,7 @@ def criar_entrada(
         id_paciente="DOG_001",
         id_sessao="SESSION_001",
 
-        parametro=Vitalparametro.SPO2,
+        parametro=ParametroVital.SPO2,
 
         data_hora=(
             datetime(
@@ -104,7 +104,7 @@ def test_abertura_e_encerramento_alerta():
     assert motor.tem_alerta_ativo(
         "DOG_001",
         "SESSION_001",
-        Vitalparametro.SPO2,
+        ParametroVital.SPO2,
     )
 
 
@@ -158,7 +158,7 @@ def test_abertura_e_encerramento_alerta():
     assert not motor.tem_alerta_ativo(
         "DOG_001",
         "SESSION_001",
-        Vitalparametro.SPO2,
+        ParametroVital.SPO2,
     )
 
 def test_nao_abre_alerta_com_dados_invalidos():
@@ -181,5 +181,5 @@ def test_nao_abre_alerta_com_dados_invalidos():
     assert not motor.tem_alerta_ativo(
         "DOG_001",
         "SESSION_001",
-        Vitalparametro.SPO2,
+        ParametroVital.SPO2,
     )

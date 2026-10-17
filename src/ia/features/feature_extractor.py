@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from src.domain.measurement import Medicao,Vitalparametro
+from src.domain.measurement import Medicao,ParametroVital
 from src.ia.features.statistical import (
     calculate_delta,
     calculate_max,
@@ -12,7 +12,7 @@ from src.ia.features.trend import calculate_inclinacao
 
 @dataclass
 class CaracteristicasJanela:
-    parametro: Vitalparametro
+    parametro: ParametroVital
     window_minutes: float
 
     count: int

@@ -17,7 +17,7 @@ def calculate_mediana(
 ) -> float:
     if not values:
         raise ValueError(
-            "Não é possível calcular medianaa de uma lista vazia."
+            "Não é possível calcular mediana de uma lista vazia."
         )
 
     return median(values)

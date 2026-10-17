@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from src.domain.measurement import (
     FonteDados,
     Medicao,
-    Vitalparametro,
+    ParametroVital,
 )
 
 
@@ -33,15 +33,15 @@ class SimuladorSinaisVitais:
         self.passo = 0
 
         self.baseline = {
-            Vitalparametro.SPO2: 98.0,
-            Vitalparametro.TEMPERATURA: 37.5,
-            Vitalparametro.PRESSAO_ARTERIAL_MEDIA: 85.0,
+            ParametroVital.SPO2: 98.0,
+            ParametroVital.TEMPERATURA: 37.5,
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA: 85.0,
         }
 
         self.units = {
-            Vitalparametro.SPO2: "%",
-            Vitalparametro.TEMPERATURA: "°C",
-            Vitalparametro.PRESSAO_ARTERIAL_MEDIA: "mmHg",
+            ParametroVital.SPO2: "%",
+            ParametroVital.TEMPERATURA: "°C",
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA: "mmHg",
         }
 
     @staticmethod
@@ -59,7 +59,7 @@ class SimuladorSinaisVitais:
     def _generate_spo2(self) -> float:
 
         baseline = self.baseline[
-            Vitalparametro.SPO2
+            ParametroVital.SPO2
         ]
 
         valor = (
@@ -84,7 +84,7 @@ class SimuladorSinaisVitais:
     def _generate_temperature(self) -> float:
 
         baseline = self.baseline[
-            Vitalparametro.TEMPERATURA
+            ParametroVital.TEMPERATURA
         ]
 
         valor = (
@@ -103,7 +103,7 @@ class SimuladorSinaisVitais:
     def _generate_pressure(self) -> float:
 
         baseline = self.baseline[
-            Vitalparametro.PRESSAO_ARTERIAL_MEDIA
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA
         ]
 
         valor = (
@@ -138,13 +138,13 @@ class SimuladorSinaisVitais:
         self.passo += 1
 
         valors = {
-            Vitalparametro.SPO2:
+            ParametroVital.SPO2:
                 self._generate_spo2(),
 
-            Vitalparametro.TEMPERATURA:
+            ParametroVital.TEMPERATURA:
                 self._generate_temperature(),
 
-            Vitalparametro.PRESSAO_ARTERIAL_MEDIA:
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA:
                 self._generate_pressure(),
         }
 
