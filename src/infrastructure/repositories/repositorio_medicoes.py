@@ -62,3 +62,52 @@ class RepositorioMedicoes:
 
             if (conexao is not None and conexao.is_connected()):
                 conexao.close()
+
+    def listar_por_sessao(self,id_sessao: str,) -> list[dict]:
+
+        comando = """
+            SELECT
+                id,
+                sessao_id,
+                data_hora,
+                parametro,
+                valor,
+                unidade,
+                fonte,
+                qualidade_sinal,
+                valida
+            FROM medicoes_sinais_vitais
+            WHERE
+                sessao_id = %s
+                AND valida = TRUE
+            ORDER BY
+                data_hora ASC,
+                id ASC
+        """
+
+        conexao = None
+        cursor = None
+
+        try:
+            conexao = get_db_connection()
+
+            cursor = conexao.cursor(
+                dictionary=True
+            )
+
+            cursor.execute(
+                comando,
+                (id_sessao,),
+            )
+
+            return cursor.fetchall()
+
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+            if (
+                conexao is not None
+                and conexao.is_connected()
+            ):
+                conexao.close()

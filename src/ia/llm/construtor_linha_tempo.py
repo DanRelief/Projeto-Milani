@@ -1,4 +1,4 @@
-from src.ia.llm.modelos_relatorio import (
+from src.ia.llm.modelos_contexto import (
     AlertaRelatorio,
     ContextoRelatorio,
     EventoHistoricoRelatorio,

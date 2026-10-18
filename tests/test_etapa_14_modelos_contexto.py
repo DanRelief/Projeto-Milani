@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.ia.llm.modelos_relatorio import (
+from ia.llm.modelos_contexto import (
     AlertaRelatorio,
     AnaliseParametroRelatorio,
     ContextoRelatorio,

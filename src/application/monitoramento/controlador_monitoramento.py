@@ -32,6 +32,9 @@ from ...ia.alertas.motor_alerta import (
 from ..buffering.vital_buffer import (
     VitalBuffer,
 )
+from src.infrastructure.repositories.repositorio_medicoes import (
+    RepositorioMedicoes,
+)
 
 
 class ControladorMonitoramento(QObject):
@@ -47,13 +50,19 @@ class ControladorMonitoramento(QObject):
     analise_parametro_atualizada = Signal(object)
     resumo_monitoramento_atualizado = Signal(object)
 
-    def __init__(self,parent=None,repositorio_alertas=None):
+    def __init__(self,parent=None,repositorio_alertas=None, repositorio_medicoes=None,):
         super().__init__(parent)
 
         self.repositorio_alertas = (
             repositorio_alertas
             if repositorio_alertas is not None
             else RepositorioAlertas()
+        )
+
+        self.repositorio_medicoes = (
+            repositorio_medicoes
+            if repositorio_medicoes is not None
+            else RepositorioMedicoes()
         )
 
         self.id_paciente = None
@@ -177,6 +186,8 @@ class ControladorMonitoramento(QObject):
 
         if self.buffer is None:
             return
+
+        self._persistir_medicoes(medicoes)
 
         for medicao in medicoes:
 
@@ -556,4 +567,16 @@ class ControladorMonitoramento(QObject):
             print(
                 "[M.I.S.A] Falha ao persistir "
                 f"evento de alerta: {erro}"
+            )
+
+    def _persistir_medicoes(self,medicoes: list[Medicao],) -> None:
+        try:
+            self.repositorio_medicoes.salvar_lote(
+                medicoes
+            )
+
+        except Exception as erro:
+            print(
+                "[M.I.S.A] Falha ao persistir "
+                f"medições: {erro}"
             )

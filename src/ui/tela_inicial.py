@@ -8,6 +8,7 @@ from PySide6.QtCore import (
     QRect,
     Qt,
     Signal,
+    QThread,
 )
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -38,6 +39,10 @@ from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
 from ..application.monitoramento.controlador_monitoramento import ControladorMonitoramento
 from ..domain.measurement import ParametroVital
+from datetime import datetime
+from src.infrastructure.repositories.repositorio_medicacoes import RepositorioMedicacoes
+from src.infrastructure.repositories.repositorio_procedimentos import RepositorioProcedimentos
+from src.ia.llm.worker_relatorio import WorkerRelatorio
 
 class TelaInicial(QMainWindow):
     logout_requested = Signal()
@@ -51,6 +56,12 @@ class TelaInicial(QMainWindow):
         self.indice_grafico = 0
         self.id_sessao_atual = None
         self.repositorio_sessoes = RepositorioSessoes()
+        self.repositorio_procedimentos = RepositorioProcedimentos()
+        self.repositorio_medicacoes = RepositorioMedicacoes()
+        self.thread_relatorio = None
+        self.worker_relatorio = None
+        self.relatorio_ia_atual = None
+        self.analises_atuais = {}
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -181,10 +192,11 @@ class TelaInicial(QMainWindow):
         sair.clicked.connect(self.solicitar_saida)
         layout.addWidget(sair)
 
-        baixar_relatorio = QPushButton("Baixar relatório do dia")
-        baixar_relatorio.setObjectName("item_menu")
-        baixar_relatorio.setToolTip("Em breve")
-        layout.addWidget(baixar_relatorio)
+        self.btn_relatorio = QPushButton("Relatório com IA")
+        self.btn_relatorio.setObjectName("item_menu")
+        self.btn_relatorio.setToolTip("Gerar relatório do monitoramento")
+        self.btn_relatorio.clicked.connect(self.gerar_relatorio)
+        layout.addWidget(self.btn_relatorio)
 
         layout.addStretch()
 
@@ -902,39 +914,181 @@ class TelaInicial(QMainWindow):
 
     def cadastrar_procedimento(self) -> None:
         if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar procedimentos.")
+            QMessageBox.warning(
+                self,
+                "Aviso",
+                (
+                    "Selecione um animal para "
+                    "lançar procedimentos."
+                ),
+            )
             return
 
-        dialogo = CadastrarProcedimentoDialog(self.paciente, self)
-        if dialogo.exec() == QDialog.DialogCode.Accepted:
-            dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["procedimento"] = dados["procedimento"]
-            self.paciente["medico_procedimento"] = dados["medico_procedimento"]
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
+        if self.id_sessao_atual is None:
+            QMessageBox.warning(
+                self,
+                "Aviso",
+                (
+                    "Não existe uma sessão de "
+                    "monitoramento ativa."
+                ),
+            )
+            return
+
+        dialogo = CadastrarProcedimentoDialog(self.paciente,self,)
+
+        if (
+            dialogo.exec()
+            != QDialog.DialogCode.Accepted
+        ):
+            return
+
+        dados = dialogo.dados()
+
+        try:
+            data_hora = (self._converter_data_hora_registro(dados.get("data"),dados.get("hora"),))
+
+            self.repositorio_procedimentos.salvar(
+                sessao_id=(self.id_sessao_atual),
+                nome=(dados["procedimento"]),
+                executado_por=(dados.get("medico_procedimento")),
+                registrado_por=int(self.usuario["id"]),
+                data_hora=data_hora,
+                observacao=(dados.get("observacao")),
+            )
+
+        except Exception as erro:
+            QMessageBox.critical(
+                self,
+                "Erro",
+                (
+                    "Não foi possível salvar "
+                    "o procedimento.\n\n"
+                    f"{erro}"
+                ),
+            )
+            return
+
+        # Só atualiza a interface depois
+        # que o banco confirmar o registro.
+        self.historico.insert(0,dados,)
+
+        self.paciente["procedimento"] = (dados["procedimento"])
+
+        self.paciente["medico_procedimento"] = dados[ "medico_procedimento"]
+
+        self.atualizar_informacoes_paciente()
+        self.atualizar_card_historico()
 
     def cadastrar_medicacao(self) -> None:
         if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar medicações.")
+            QMessageBox.warning(
+                self,
+                "Aviso",
+                (
+                    "Selecione um animal para "
+                    "lançar medicações."
+                ),
+            )
             return
 
-        dialogo = CadastrarMedicacaoDialog(self.paciente, self)
-        if dialogo.exec() == QDialog.DialogCode.Accepted:
-            dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["ultima_medicacao"] = dados["medicacao"]
-            self.paciente["quantidade_medicacao"] = f"{dados['quantidade']} {dados['unidade']}"
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
+        if self.id_sessao_atual is None:
+            QMessageBox.warning(
+                self,
+                "Aviso",
+                (
+                    "Não existe uma sessão de "
+                    "monitoramento ativa."
+                ),
+            )
+            return
+
+        dialogo = CadastrarMedicacaoDialog(self.paciente,self,)
+
+        if (
+            dialogo.exec()
+            != QDialog.DialogCode.Accepted
+        ):
+            return
+
+        dados = dialogo.dados()
+
+        try:
+            data_hora = (
+                self._converter_data_hora_registro(
+                    dados.get("data"),
+                    dados.get("hora"),
+                )
+            )
+
+            self.repositorio_medicacoes.salvar(
+                sessao_id=(
+                    self.id_sessao_atual
+                ),
+                nome=(
+                    dados["medicacao"]
+                ),
+                quantidade=float(str(dados["quantidade"]).replace(",", ".")
+                ),
+                unidade=(
+                    dados["unidade"]
+                ),
+                administrado_por=(
+                    dados.get(
+                        "medico_medicacao"
+                    )
+                ),
+                registrado_por=int(
+                    self.usuario["id"]
+                ),
+                data_hora=data_hora,
+                observacao=(
+                    dados.get("observacao")
+                ),
+            )
+
+        except Exception as erro:
+            QMessageBox.critical(
+                self,
+                "Erro",
+                (
+                    "Não foi possível salvar "
+                    "a medicação.\n\n"
+                    f"{erro}"
+                ),
+            )
+            return
+
+        self.historico.insert(
+            0,
+            dados,
+        )
+
+        self.paciente[
+            "ultima_medicacao"
+        ] = dados[
+            "medicacao"
+        ]
+
+        self.paciente[
+            "quantidade_medicacao"
+        ] = (
+            f"{dados['quantidade']} "
+            f"{dados['unidade']}"
+        )
+
+        self.atualizar_informacoes_paciente()
+        self.atualizar_card_historico()
 
     def ver_historico_completo(self) -> None:
         dialogo = HistoricoDialog(self.historico, self)
         dialogo.exec()
-        
+
     def atualizar_card_historico(self) -> None:
         if not self.historico:
-            self.historico_label.setText("Nenhum procedimento ou medicação cadastrada.")
+            self.historico_label.setText(
+                "Nenhum procedimento ou medicação cadastrada."
+            )
             return
 
         textos = []
@@ -943,13 +1097,17 @@ class TelaInicial(QMainWindow):
                 textos.append(
                     f"Procedimento: {registro['procedimento']}<br>"
                     f"Médico responsável: {registro['medico_procedimento']}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                    f"Data: {registro.get('data', '')} "
+                    f"Hora: {registro.get('hora', '')}<br><br>"
                 )
             else:
                 textos.append(
                     f"Responsável: {registro.get('medico_medicacao', '')}<br>"
-                    f"Medicação: {registro.get('medicacao', '')} Qtd: {registro.get('quantidade', '')} {registro.get('unidade', '')}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                    f"Medicação: {registro.get('medicacao', '')} "
+                    f"Qtd: {registro.get('quantidade', '')} "
+                    f"{registro.get('unidade', '')}<br>"
+                    f"Data: {registro.get('data', '')} "
+                    f"Hora: {registro.get('hora', '')}<br><br>"
                 )
 
         self.historico_label.setText("".join(textos))
@@ -1023,6 +1181,7 @@ class TelaInicial(QMainWindow):
         analises = resumo[
             "analises"
         ]
+        self.analises_atuais = analises
 
         if status == "aquecimento":
 
@@ -1289,3 +1448,174 @@ class TelaInicial(QMainWindow):
             0,
             1,
         )
+    @staticmethod
+    def _converter_data_hora_registro(data,hora,) -> datetime:
+
+        if isinstance(data, datetime):
+            return data
+
+        texto_data = str(data).strip()
+        texto_hora = str(hora).strip()
+
+        texto_completo = (
+            f"{texto_data} {texto_hora}"
+        ).strip()
+
+        formatos = [
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+        ]
+
+        for formato in formatos:
+            try:
+                return datetime.strptime(
+                    texto_completo,
+                    formato,
+                )
+
+            except ValueError:
+                continue
+
+        raise ValueError(
+            "Formato de data/hora não reconhecido: "
+            f"{texto_completo}"
+        )
+
+    def gerar_relatorio(self,) -> None:
+
+        if self.id_sessao_atual is None:
+
+            QMessageBox.warning(
+                self,
+                "Relatório",
+                (
+                    "Selecione um animal e inicie "
+                    "o monitoramento antes de gerar "
+                    "o relatório."
+                ),
+            )
+
+            return
+
+        if (
+            self.thread_relatorio is not None
+            and self.thread_relatorio.isRunning()
+        ):
+            return
+
+        # Fecha o menu lateral.
+        self.fechar_menu()
+
+        self.btn_relatorio.setEnabled(
+            False
+        )
+
+        self.btn_relatorio.setText(
+            "Gerando relatório..."
+        )
+
+        self.thread_relatorio = QThread(
+            self
+        )
+
+        self.worker_relatorio = (
+            WorkerRelatorio(
+                id_sessao=(
+                    self.id_sessao_atual
+                ),
+                analises_atuais=(
+                    self.analises_atuais
+                ),
+            )
+        )
+
+        self.worker_relatorio.moveToThread(
+            self.thread_relatorio
+        )
+
+        self.thread_relatorio.started.connect(
+            self.worker_relatorio.executar
+        )
+
+        self.worker_relatorio.relatorio_gerado.connect(
+            self._relatorio_gerado
+        )
+
+        self.worker_relatorio.erro.connect(
+            self._erro_geracao_relatorio
+        )
+
+        self.worker_relatorio.finalizado.connect(
+            self.thread_relatorio.quit
+        )
+
+        self.worker_relatorio.finalizado.connect(
+            self.worker_relatorio.deleteLater
+        )
+
+        self.thread_relatorio.finished.connect(
+            self._finalizar_geracao_relatorio
+        )
+
+        self.thread_relatorio.start()
+
+    def _relatorio_gerado(self,relatorio,) -> None:
+
+        self.relatorio_ia_atual = (
+            relatorio
+        )
+
+        print()
+        print(
+            "[M.I.S.A] Relatório por IA gerado."
+        )
+
+        print(
+            relatorio.resumo_geral
+        )
+
+        QMessageBox.information(
+            self,
+            "Relatório",
+            (
+                "O conteúdo do relatório foi "
+                "gerado com sucesso.\n\n"
+                "A exportação para PDF será "
+                "integrada a seguir."
+            ),
+        )
+
+    def _erro_geracao_relatorio(
+        self,
+        mensagem: str,
+    ) -> None:
+
+        QMessageBox.critical(
+            self,
+            "Erro ao gerar relatório",
+            (
+                "Não foi possível gerar "
+                "o relatório por IA.\n\n"
+                f"{mensagem}"
+            ),
+        )
+
+    def _finalizar_geracao_relatorio(
+        self,
+    ) -> None:
+
+        self.btn_relatorio.setEnabled(
+            True
+        )
+
+        self.btn_relatorio.setText(
+            "Relatório..."
+        )
+
+        if self.thread_relatorio is not None:
+            self.thread_relatorio.deleteLater()
+
+        self.thread_relatorio = None
+        self.worker_relatorio = None

@@ -4,7 +4,7 @@ from src.ia.llm.construtor_linha_tempo import (
     construir_linha_tempo,
 )
 
-from src.ia.llm.modelos_relatorio import (
+from ia.llm.modelos_contexto import (
     AlertaRelatorio,
     ContextoRelatorio,
     DadosPacienteRelatorio,
