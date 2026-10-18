@@ -1,6 +1,25 @@
 from pathlib import Path
 from uuid import uuid4
 
+from src.infrastructure.database import salvar_observacao_docente
+
+from PySide6.QtWidgets import QScrollArea
+
+from PySide6.QtWidgets import (
+    QFrame, QHBoxLayout, QLabel, QMessageBox, 
+    QPushButton, QScrollArea, QVBoxLayout, QWidget
+)
+
+from ..infrastructure.database import deletar_historico_procedimento, deletar_historico_medicacao, carregar_historico_animal
+
+from ..infrastructure.database import (
+    carregar_historico_animal,
+    salvar_historico_medicacao,
+    salvar_historico_procedimento,
+)
+
+from PySide6.QtPrintSupport import QPrinter
+
 from PySide6.QtCore import (
     QEasingCurve,
     QParallelAnimationGroup,
@@ -9,7 +28,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -23,6 +42,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QTextEdit,
+    QFileDialog
 )
 from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
 
@@ -35,6 +56,8 @@ from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
 
+from src.infrastructure.database import criar_sessao_monitoramento, salvar_medicao_sinal_vital
+
 class TelaInicial(QMainWindow):
     logout_requested = Signal()
 
@@ -45,8 +68,13 @@ class TelaInicial(QMainWindow):
         self.resize(1024, 720)
         self.setMinimumSize(900, 650)
 
-        # 1. Inicialmente sem animal selecionado (dados zerados)
+        # 1. Definição ÚNICA e padronizada do papel do usuário
+        user_role = str(usuario.get("role", "")).strip().lower()
+        self.is_teacher = user_role in ["teacher", "docente", "professor", "admin"]
+
+        # 2. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
+            "id": None,
             "nome": "---",
             "especie": "---",
             "idade": 0,
@@ -57,11 +85,11 @@ class TelaInicial(QMainWindow):
             "ultima_medicacao": "---",
             "quantidade_medicacao": "---",
             "estado_clinico": "---",
+            "observacao_docente": "",
         }
 
+        self.sessao_ativa_id = None  # Armazena o UUID da sessão em sessoes_monitoramento
         self.historico = []
-
-        # Inicializa o simulador de sinais vitais
         self.simulator = None
 
         # Widget Central e Layout Principal
@@ -71,7 +99,7 @@ class TelaInicial(QMainWindow):
         layout_fundo.setContentsMargins(0, 0, 0, 0)
         layout_fundo.setSpacing(0)
 
-        # Cabeçalho Limpo (Apenas logo, usuário, professor e menu)
+        # Cabeçalho Superior
         cabecalho = QWidget()
         cabecalho.setObjectName("cabecalho")
         cabecalho.setFixedHeight(75)
@@ -79,13 +107,39 @@ class TelaInicial(QMainWindow):
         layout_cabecalho.setContentsMargins(16, 0, 16, 0)
         layout_cabecalho.setSpacing(16)
 
-        caminho_logo = Path(__file__).resolve().parents[2] / "assets" / "logo_misa.png"
+        # 3. Busca dinamicamente e com segurança o diretório de assets
+        # Tenta localizar a pasta assets subindo na árvore de diretórios
+        diretorio_atual = Path(__file__).resolve().parent
+        pasta_assets = None
+        for pai in [diretorio_atual] + list(diretorio_atual.parents):
+            candidato = pai / "assets"
+            if candidato.is_dir():
+                pasta_assets = candidato
+                break
+
+        if not pasta_assets:
+            pasta_assets = Path(__file__).resolve().parents[2] / "assets"
+
+        # 4. Seleção flexível do arquivo de imagem do logo do Docente
+        caminho_logo = None
+        if self.is_teacher:
+            for nome_arquivo in ["logo_misa_docente.jpg", "logo_misa_docente.png", "logo_misa_verde.png"]:
+                teste = pasta_assets / nome_arquivo
+                if teste.exists():
+                    caminho_logo = teste
+                    break
+
+        # Fallback para o logo do Aluno
+        if not caminho_logo or not caminho_logo.exists():
+            caminho_logo = pasta_assets / "logo_misa.png"
 
         logo = QLabel()
-        if caminho_logo.exists():
-            imagem_logo = QPixmap(str(caminho_logo))
+        pixmap = QPixmap(str(caminho_logo))
+        
+        # Só exibe se o PySide6 conseguir carregar o Pixmap com sucesso
+        if not pixmap.isNull():
             logo.setPixmap(
-                imagem_logo.scaled(
+                pixmap.scaled(
                     200,
                     70,
                     Qt.AspectRatioMode.KeepAspectRatio,
@@ -93,26 +147,31 @@ class TelaInicial(QMainWindow):
                 )
             )
 
+        # 5. Definição da cor do tema do cabeçalho
+        cor_destaque = "#287a55" if self.is_teacher else "#08b9df"
+
         dados_usuario = QLabel(
-            f'<span style="color:#08b9df;"><b>{usuario.get("role", "Aluno")}:</b></span> '
+            f'<span style="color:{cor_destaque};"><b>{usuario.get("role", "Aluno")}:</b></span> '
             f'{usuario.get("name", "")}<br>'
-            f'<span style="color:#08b9df;"><b>{usuario.get("identifier_label", "RA")}:</b></span> '
+            f'<span style="color:{cor_destaque};"><b>{usuario.get("identifier_label", "E-mail")}:</b></span> '
             f'{usuario.get("identifier", "")}'
         )
 
         nome_professor = usuario.get("professor_name", "Milani")
         dados_professor = QLabel(
-            f'<span style="color:#08b9df;"><b>Professor:</b></span> {nome_professor}'
+            f'<span style="color:{cor_destaque};"><b>Professor:</b></span> {nome_professor}'
         )
 
-        # Botão do menu lateral
+        # Botão do Menu Lateral (☰)
         botao_menu = QPushButton("\u2630")
         botao_menu.setObjectName("botao_menu")
         botao_menu.clicked.connect(self.alternar_menu)
 
+        # Título M.I.S.A.
         titulo = QLabel("M.I.S.A")
-        titulo.setStyleSheet("font-size: 38px; font-weight: bold; color: #08b9df;")
+        titulo.setStyleSheet(f"font-size: 38px; font-weight: bold; color: {cor_destaque};")
 
+        # Adiciona os elementos ao layout do cabeçalho
         layout_cabecalho.addWidget(logo)
         layout_cabecalho.addWidget(titulo, alignment=Qt.AlignmentFlag.AlignVCenter)
         layout_cabecalho.addWidget(dados_usuario, alignment=Qt.AlignmentFlag.AlignVCenter)
@@ -126,14 +185,48 @@ class TelaInicial(QMainWindow):
         conteudo_widget = self.montar_conteudo()
         layout_fundo.addWidget(conteudo_widget, 1)
 
+        # Aplica os estilos gerais e constrói o menu lateral
         self._aplicar_estilos()
         self.setCentralWidget(central)
         self.montar_menu_lateral(central, usuario)
 
+    def update_chart(self, medicao) -> None:
+        primeira_serie = self.series_map["freq_cardiaca"][0]
+        index = primeira_serie.count()
+
+        valores = {
+            "oxigenio": (getattr(medicao, "oxigenio", getattr(medicao, "spo2", 0.0)), "%"),
+            "pressao_arterial": (getattr(medicao, "pressao_arterial", 0.0), "mmHg"),
+            "temperatura": (getattr(medicao, "temperatura", 0.0), "°C"),
+        }
+
+        # Atualiza a interface gráfica
+        for key, (val, und) in valores.items():
+            if key in self.series_map:
+                series = self.series_map[key][0]
+                series.append(float(index), float(val))
+
+            # Se houver uma sessão ativa, persiste as medições no MySQL
+            if self.sessao_ativa_id:
+                salvar_medicao_sinal_vital(
+                    sessao_id=self.sessao_ativa_id,
+                    parametro=key,
+                    valor=float(val),
+                    unidade=und,
+                    fonte="simulador"
+                )
+
+        # Ajuste do eixo X do gráfico
+        JANELA_MAXIMA = 30
+        if index >= JANELA_MAXIMA:
+            self.axis_x.setRange(index - JANELA_MAXIMA + 1, index)
+        else:
+            self.axis_x.setRange(0, JANELA_MAXIMA)
+
     def montar_menu_lateral(
         self, central: QWidget, usuario: dict[str, str]
     ) -> None:
-        """Cria o painel lateral sobreposto a tela inicial."""
+        """Cria o painel lateral sobreposto à tela inicial com cores dinâmicas por perfil."""
         self.menu_overlay = QFrame(central)
         self.menu_overlay.setObjectName("menu_overlay")
         self.menu_overlay.hide()
@@ -175,61 +268,70 @@ class TelaInicial(QMainWindow):
 
         caminho_logo = Path(__file__).resolve().parents[2] / "assets" / "logo_misa.png"
         logo_menu = QLabel()
-        imagem_logo = QPixmap(str(caminho_logo))
-        logo_menu.setPixmap(
-            imagem_logo.scaled(
-                160,
-                135,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
+        if caminho_logo.exists():
+            imagem_logo = QPixmap(str(caminho_logo))
+            logo_menu.setPixmap(
+                imagem_logo.scaled(
+                    160,
+                    135,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
             )
-        )
         logo_menu.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(logo_menu)
 
+        # 1. Define as cores dinâmicas de acordo com o papel do usuário logado:
+        # - Verde para Docente (#287a55) / Hover (#216746)
+        # - Azul para Aluno (#08b9df) / Hover (#078eaa)
+        e_docente = getattr(self, "is_teacher", False) or str(usuario.get("role", "")).lower() in ["teacher", "docente", "professor"]
+        
+        cor_tema = "#287a55" if e_docente else "#08b9df"
+        cor_hover_item = "#216746" if e_docente else "#078eaa"
+        cor_fechar_bg = "#1f4d3a" if e_docente else "#2100b8"
+        cor_fechar_hover = "#183e2e" if e_docente else "#351bc9"
+
+        # 2. Aplica o estilo dinâmico diretamente na gaveta do menu lateral
         self.menu_overlay.setStyleSheet(
-            """
-            QFrame#menu_overlay {
+            f"""
+            QFrame#menu_overlay {{
                 background-color: rgba(0, 0, 0, 155);
-            }
+            }}
 
-            QFrame#menu_panel {
-                background-color: white;
+            QFrame#menu_panel {{
+                background-color: #ffffff;
                 border-radius: 16px;
-            }
+                border-right: 3px solid {cor_tema};
+            }}
 
-            QPushButton#botao_fechar_menu {
-                background-color: #2100b8;
-                color: white;
+            QPushButton#botao_fechar_menu {{
+                background-color: {cor_fechar_bg};
+                color: #ffffff;
                 border: none;
                 border-radius: 22px;
                 padding: 6px 18px;
                 min-height: 32px;
                 font-size: 25px;
                 font-weight: bold;
-            }
+            }}
 
-            QPushButton#botao_fechar_menu:hover {
-                background-color: #351bc9;
-            }
+            QPushButton#botao_fechar_menu:hover {{
+                background-color: {cor_fechar_hover};
+            }}
 
-            QPushButton#botao_fechar_menu:pressed {
-                background-color: #180087;
-            }
-
-            QPushButton#item_menu {
-                color: #08b9df;
+            QPushButton#item_menu {{
+                color: {cor_tema};
                 background-color: transparent;
                 border: none;
-                padding: 4px 10px;
+                padding: 6px 10px;
                 font-size: 20px;
                 font-weight: bold;
                 text-align: left;
-            }
+            }}
 
-            QPushButton#item_menu:hover {
-                color: #078eaa;
-            }
+            QPushButton#item_menu:hover {{
+                color: {cor_hover_item};
+            }}
             """
         )
         self.atualizar_geometria_menu()
@@ -359,7 +461,7 @@ class TelaInicial(QMainWindow):
         card_historico = self.criar_card_historico()
         card_alertas = self.criar_card_alerta_ia()
 
-        card_paciente.setFixedHeight(340)
+        card_paciente.setFixedHeight(480)
         card_historico.setFixedHeight(240)
         card_monitoramento.setFixedHeight(420)
         card_alertas.setFixedHeight(140)
@@ -383,6 +485,160 @@ class TelaInicial(QMainWindow):
 
         return conteudo
 
+    def exportar_relatorio_pdf(self) -> None:
+        """Gera e exporta um relatório completo do paciente perfeitamente ajustado aos limites da página A4 em PDF."""
+        if not self.paciente.get("nome") or self.paciente.get("nome") == "---":
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal antes de exportar o relatório."
+            )
+            return
+
+        # 1. Caixa de diálogo para escolher onde salvar o arquivo
+        nome_sugerido = f"Relatorio_MISA_{self.paciente['nome']}.pdf"
+        caminho_arquivo, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Relatório em PDF", nome_sugerido, "Arquivos PDF (*.pdf)"
+        )
+
+        if not caminho_arquivo:
+            return  # Cancelado pelo usuário
+
+        if not caminho_arquivo.lower().endswith(".pdf"):
+            caminho_arquivo += ".pdf"
+
+        # Cores do tema conforme o perfil
+        e_docente = getattr(self, "is_teacher", False) or str(self.usuario.get("role", "")).lower() in ["teacher", "docente", "professor"]
+        cor_tema = "#287a55" if e_docente else "#08b9df"
+        cor_cabecalho_tabela = "#216746" if e_docente else "#078eaa"
+
+        caminho_img_temp = Path(__file__).resolve().parent / "temp_grafico_misa.png"
+
+        try:
+            # 2. Captura a imagem do gráfico atual da tela
+            pixmap_grafico = self.grafico_view.grab()
+            pixmap_grafico.save(str(caminho_img_temp), "PNG")
+
+            # 3. Capitalização e Formatação do Paciente
+            nome_paciente = str(self.paciente.get('nome', '---')).title()
+            especie_paciente = str(self.paciente.get('especie', '---')).capitalize()
+            porte_paciente = str(self.paciente.get('porte', '---')).capitalize()
+            responsavel_paciente = str(self.paciente.get('medico_procedimento', '---')).title()
+            emitido_por_nome = str(self.usuario.get('name', 'Usuário')).title()
+            emitido_por_papel = str(self.usuario.get('role', 'Aluno')).capitalize()
+
+            # 4. Tabela de Histórico
+            linhas_historico_html = ""
+            if not self.historico:
+                linhas_historico_html = "<tr><td colspan='4' style='text-align:center; color:#333333; padding: 10px; font-size: 11pt;'><i>Nenhum procedimento ou medicação cadastrada até o momento.</i></td></tr>"
+            else:
+                for reg in self.historico:
+                    data_hora = f"{reg.get('data', '')} {reg.get('hora', '')}".strip()
+                    if reg.get("tipo") == "Procedimento":
+                        procedimento_fmt = str(reg.get('procedimento', '-')).capitalize()
+                        resp_fmt = str(reg.get("medico_procedimento", "-")).title()
+                        detalhe = f"<b>Procedimento:</b> {procedimento_fmt}"
+                        resp = resp_fmt
+                    else:
+                        medicacao_fmt = str(reg.get('medicacao', '-')).capitalize()
+                        resp_fmt = str(reg.get("medico_medicacao", "-")).title()
+                        qtd = reg.get('quantidade', '')
+                        unid = reg.get('unidade', '')
+                        dose = f"({qtd} {unid})".strip() if qtd or unid else ""
+                        detalhe = f"<b>Medicação:</b> {medicacao_fmt} {dose}"
+                        resp = resp_fmt
+
+                    linhas_historico_html += f"""
+                        <tr>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{data_hora}</td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'><b>{reg.get('tipo', 'Registro')}</b></td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{detalhe}</td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{resp}</td>
+                        </tr>
+                    """
+
+            observacao = self.paciente.get("observacao_docente") or "Nenhuma observação registrada."
+
+            # 5. Estrutura o HTML com margens seguras e gráfico com largura restrita para A4
+            conteudo_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #000000; background-color: #ffffff; font-size: 11pt; }}
+                    h1 {{ color: {cor_tema}; border-bottom: 2px solid {cor_tema}; padding-bottom: 6px; font-size: 20pt; font-weight: bold; margin-bottom: 15px; }}
+                    h2 {{ color: {cor_tema}; margin-top: 18px; font-size: 14pt; border-bottom: 1px solid #cccccc; padding-bottom: 4px; font-weight: bold; }}
+                    .info-box {{ background-color: #f2f4f7; border: 1px solid #b0bec5; padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 11pt; line-height: 1.5; color: #000000; }}
+                    .info-box b {{ color: {cor_tema}; font-weight: bold; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 10px; background-color: #ffffff; table-layout: fixed; }}
+                    th {{ background-color: {cor_cabecalho_tabela}; color: #ffffff; padding: 8px; text-align: left; font-size: 11pt; font-weight: bold; }}
+                    td {{ color: #1a1a1a; font-size: 10pt; word-wrap: break-word; }}
+                </style>
+            </head>
+            <body>
+                <h1>M.I.S.A. - Relatório de Monitoramento Animal</h1>
+                
+                <div class="info-box">
+                    <b>Paciente:</b> {nome_paciente} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Espécie:</b> {especie_paciente} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Idade:</b> {self.paciente.get('idade', 0)} anos &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Porte:</b> {porte_paciente}<br><br>
+                    <b>Responsável Técnico:</b> {responsavel_paciente}<br>
+                    <b>Emitido por:</b> {emitido_por_nome} ({emitido_por_papel})
+                </div>
+
+                <h2>1. Gráfico de Sinais Vitais em Tempo Real</h2>
+                <div style="text-align: center; margin: 10px 0;">
+                    <img src="{caminho_img_temp.as_uri()}" style="width: 100%; max-width: 520px; height: auto; display: block; margin: 0 auto;" />
+                </div>
+
+                <h2>2. Observações do Docente</h2>
+                <div class="info-box" style="color: #1a1a1a; font-size: 11pt;">
+                    <i>{observacao}</i>
+                </div>
+
+                <h2>3. Histórico de Procedimentos e Medicações</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="22%">Data / Hora</th>
+                            <th width="15%">Tipo</th>
+                            <th width="43%">Descrição / Detalhes</th>
+                            <th width="20%">Responsável</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {linhas_historico_html}
+                    </tbody>
+                </table>
+            </body>
+            </html>
+            """
+
+            # 6. Renderiza no documento PDF
+            documento = QTextDocument()
+            documento.setHtml(conteudo_html)
+
+            printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+            printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+            printer.setOutputFileName(caminho_arquivo)
+
+            documento.print_(printer)
+
+            QMessageBox.information(
+                self,
+                "Sucesso",
+                f"Relatório PDF gerado com sucesso!\n\nSalvo em:\n{caminho_arquivo}",
+            )
+
+        except Exception as err:
+            QMessageBox.critical(
+                self, "Erro na Geração", f"Não foi possível gerar o PDF: {err}"
+            )
+        finally:
+            if caminho_img_temp.exists():
+                try:
+                    caminho_img_temp.unlink()
+                except Exception:
+                    pass
+
     def criar_card_paciente(self) -> QFrame:
         card = self.criar_card()
         layout = QVBoxLayout(card)
@@ -390,7 +646,12 @@ class TelaInicial(QMainWindow):
         layout.setSpacing(6)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Informações do Paciente (inicialmente vazias)
+        # 1. Recupera e valida se o usuário logado é Docente (Teacher)
+        user_role = str(self.usuario.get("role", "")).strip().lower()
+        self.is_teacher = user_role in ["teacher", "docente", "professor", "admin"]
+        cor_destaque = "#287a55" if self.is_teacher else "#08b9df"
+
+        # 2. Informações básicas do Paciente
         self.informacoes_paciente = QLabel()
         self.informacoes_paciente.setObjectName("informacoes_paciente")
         self.informacoes_paciente.setTextFormat(Qt.TextFormat.RichText)
@@ -401,9 +662,10 @@ class TelaInicial(QMainWindow):
         linha_informacoes.setContentsMargins(0, 0, 0, 0)
         linha_informacoes.addWidget(self.informacoes_paciente, 1)
 
+        # Botão Editar
         self.btn_editar_paciente = QPushButton("Editar")
         self.btn_editar_paciente.setObjectName("botao_acao")
-        self.btn_editar_paciente.setEnabled(False)  # Desabilitado até carregar um paciente
+        self.btn_editar_paciente.hide()  # Oculto inicialmente até selecionar paciente
         self.btn_editar_paciente.clicked.connect(self.editar_paciente)
         linha_informacoes.addWidget(
             self.btn_editar_paciente,
@@ -412,48 +674,112 @@ class TelaInicial(QMainWindow):
 
         layout.addLayout(linha_informacoes)
 
-        # Seção AÇÕES DO ANIMAL
-        cadastrar_label = QLabel("AÇÕES DO ANIMAL")
-        cadastrar_label.setObjectName("titulo_cadastrar")
-        cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(cadastrar_label)
+        # 3. Rótulo de Observações do Docente
+        label_obs = QLabel("<b>Observações do Docente:</b>")
+        label_obs.setStyleSheet(f"color: {cor_destaque}; font-size: 13px; margin-top: 6px;")
+        layout.addWidget(label_obs)
 
-        # 1. Linha com os botões de Gestão do Animal (Cadastrar / Monitorar)
+        # 4. INSTANCIAÇÃO DA CAIXA DE TEXTO (Precisa vir ANTES de usar setStyleSheet ou atribuir estilos)
+        self.campo_observacao = QTextEdit()
+        self.campo_observacao.setPlaceholderText("Escreva aqui observações e orientações para os alunos...")
+        self.campo_observacao.setMaximumHeight(60)
+
+        # Cor do texto de observação: Verde para Docente, Escuro/Preto para Aluno
+        cor_texto_box = "#287a55" if self.is_teacher else "#1a1a1a"
+
+        self.campo_observacao.setStyleSheet(f"""
+            QTextEdit {{
+                border: 1px solid #c7d0d9;
+                border-radius: 5px;
+                padding: 6px;
+                font-size: 12px;
+                background-color: #ffffff;
+                color: {cor_texto_box};
+            }}
+            QTextEdit:focus {{
+                border: 1px solid {cor_destaque};
+            }}
+        """)
+
+        # Se for Aluno, a caixa fica em modo somente leitura
+        if not self.is_teacher:
+            self.campo_observacao.setReadOnly(True)
+            self.campo_observacao.setPlaceholderText("Nenhuma observação cadastrada pelo docente.")
+
+        layout.addWidget(self.campo_observacao)
+
+        # Botão para o Docente Salvar as Observações
+        if self.is_teacher:
+            self.btn_salvar_obs = QPushButton("Salvar Observação")
+            self.btn_salvar_obs.setObjectName("btn_card_animal")
+            self.btn_salvar_obs.setFixedHeight(28)
+            self.btn_salvar_obs.clicked.connect(self._salvar_observacao_docente)
+            layout.addWidget(self.btn_salvar_obs, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # 5. Seção AÇÕES DO ANIMAL
+        self.cadastrar_label = QLabel("")
+        self.cadastrar_label.setObjectName("titulo_cadastrar")
+        self.cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cadastrar_label.hide()
+        layout.addWidget(self.cadastrar_label)
+
+        # Botões de Gestão (Cadastrar / Monitorar)
         linha_botoes_animais = QHBoxLayout()
+        linha_botoes_animais.addStretch()
+
         self.btn_cadastrar = QPushButton("Cadastrar Animal")
         self.btn_cadastrar.setObjectName("btn_card_animal")
         self.btn_cadastrar.clicked.connect(self._abrir_cadastro_animal)
+        
+        if self.is_teacher:
+            self.btn_cadastrar.show()
+            linha_botoes_animais.addWidget(self.btn_cadastrar)
+        else:
+            self.btn_cadastrar.hide()
 
         self.btn_monitorar = QPushButton("Monitorar Animal")
         self.btn_monitorar.setObjectName("btn_card_animal")
         self.btn_monitorar.clicked.connect(self._abrir_selecao_animal)
-
-        linha_botoes_animais.addStretch()
-        linha_botoes_animais.addWidget(self.btn_cadastrar)
         linha_botoes_animais.addWidget(self.btn_monitorar)
-        linha_botoes_animais.addStretch()
 
+        linha_botoes_animais.addStretch()
         layout.addLayout(linha_botoes_animais)
 
-        # 2. Linha com os botões de Lançamentos Clínicos (Procedimento / Medicação)
+        # Botões Lançamentos Clínicos (Procedimento / Medicação)
         linha_cadastro_eventos = QHBoxLayout()
-        btn_procedimento = QPushButton("Procedimento")
-        btn_procedimento.setObjectName("btn_card_animal")
-        btn_procedimento.clicked.connect(self.cadastrar_procedimento)
+        self.btn_procedimento = QPushButton("Procedimento")
+        self.btn_procedimento.setObjectName("btn_card_animal")
+        self.btn_procedimento.hide()
+        self.btn_procedimento.clicked.connect(self.cadastrar_procedimento)
 
-        btn_medicacao = QPushButton("Medicação")
-        btn_medicacao.setObjectName("btn_card_animal")
-        btn_medicacao.clicked.connect(self.cadastrar_medicacao)
+        self.btn_medicacao = QPushButton("Medicação")
+        self.btn_medicacao.setObjectName("btn_card_animal")
+        self.btn_medicacao.hide()
+        self.btn_medicacao.clicked.connect(self.cadastrar_medicacao)
 
         linha_cadastro_eventos.addStretch()
-        linha_cadastro_eventos.addWidget(btn_procedimento)
-        linha_cadastro_eventos.addWidget(btn_medicacao)
+        linha_cadastro_eventos.addWidget(self.btn_procedimento)
+        linha_cadastro_eventos.addWidget(self.btn_medicacao)
         linha_cadastro_eventos.addStretch()
 
         layout.addLayout(linha_cadastro_eventos)
 
         return card
 
+    def _salvar_observacao_docente(self) -> None:
+        animal_id = self.paciente.get("id")
+        if not animal_id or self.paciente.get("nome") == "---":
+            QMessageBox.warning(self, "Aviso", "Selecione um animal antes de salvar observações.")
+            return
+
+        texto_obs = self.campo_observacao.toPlainText().strip()
+        
+        # Persiste diretamente na tabela 'animais' do MySQL
+        if salvar_observacao_docente(animal_id, texto_obs):
+            self.paciente["observacao_docente"] = texto_obs
+            QMessageBox.information(self, "Sucesso", "Observação registrada e salva no banco de dados com sucesso!")
+        else:
+            QMessageBox.critical(self, "Erro", "Não foi possível salvar a observação no banco de dados.")
 
     def criar_card_monitoramento(self) -> QFrame:
         card = self.criar_card()
@@ -461,65 +787,95 @@ class TelaInicial(QMainWindow):
         layout.setContentsMargins(10, 10, 10, 10)
 
         self.grafico = QChart()
-        self.grafico.setTitle("Monitoramento em Tempo Real (IA Teste)")
-        self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+        self.grafico.setTitle("Sinais Vitais e Agentes Inalatórios")
+        self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation) # Animação desativada para plotagem contínua fluida
 
         self.grafico_view = QChartView(self.grafico)
         self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
         self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         layout.addWidget(self.grafico_view, 1)
 
-        # 3 Séries para Teste
-        self.oxigenio_serie = QSplineSeries()
-        self.oxigenio_serie.setName("Oxigênio (%)")
+        # Mapeamento e estilo das 8 séries de dados (Cor distinta para cada parâmetro)
+        self.series_map = {
+            "freq_cardiaca": (QSplineSeries(), "FC (bpm)", QColor("#E74C3C")),         # Vermelho
+            "pressao_arterial": (QSplineSeries(), "PA (mmHg)", QColor("#E67E22")),     # Laranja
+            "spo2": (QSplineSeries(), "SpO2 (%)", QColor("#2ECC71")),                  # Verde
+            "etco2": (QSplineSeries(), "ETCO2 (mmHg)", QColor("#F1C40F")),             # Amarelo
+            "freq_respiratoria": (QSplineSeries(), "FR (rpm)", QColor("#3498DB")),     # Azul Claro
+            "temperatura": (QSplineSeries(), "Temp (°C)", QColor("#9B59B6")),          # Roxo
+            "fluxo_o2_ar": (QSplineSeries(), "O2/Ar (L/min)", QColor("#1ABC9C")),      # Turquesa
+            "iso_sevo": (QSplineSeries(), "Iso/Sevo (%)", QColor("#34495E"))           # Cinza Escuro
+        }
 
-        self.pressao_serie = QSplineSeries()
-        self.pressao_serie.setName("Pressão Arterial (mmHg)")
+        for key, (series, label, color) in self.series_map.items():
+            series.setName(label)
+            pen = QPen(color)
+            pen.setWidth(2)
+            series.setPen(pen)
+            self.grafico.addSeries(series)
 
-        self.temperatura_serie = QSplineSeries()
-        self.temperatura_serie.setName("Temperatura (°C)")
-
-        self.grafico.addSeries(self.oxigenio_serie)
-        self.grafico.addSeries(self.pressao_serie)
-        self.grafico.addSeries(self.temperatura_serie)
-
-        self.axis_x = QValueAxis()
-        self.axis_x.setTitleText("Amostras / Tempo")
-        self.axis_x.setLabelFormat("%d")
-        self.axis_x.setRange(0, 30)
+        # Configuração dos Eixos
+        self.axis_x = QCategoryAxis()
+        self.axis_x.setTitleText("Horário Decorrido")
 
         self.axis_y = QValueAxis()
-        self.axis_y.setRange(0, 150)
+        self.axis_y.setRange(0, 180) # Amplitude abrangendo os principais sinais vitais
         self.axis_y.setTitleText("Valor")
 
         self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
         self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
 
-        for series in (self.oxigenio_serie, self.pressao_serie, self.temperatura_serie):
+        for series, _, _ in self.series_map.values():
             series.attachAxis(self.axis_x)
             series.attachAxis(self.axis_y)
 
         return card
 
     def update_chart(self, medicao) -> None:
-        index = self.oxigenio_serie.count()
+        if not medicao:
+            return
+        serie_referencia = self.series_map["spo2"][0]
+        index = serie_referencia.count()
+        horario = medicao[0].data_hora.strftime("%H:%M:%S")
 
-        # Adiciona os valores do objeto Measurement
-        self.oxigenio_serie.append(float(index), float(getattr(medicao, "oxigenio", 0.0)))
-        self.pressao_serie.append(float(index), float(getattr(medicao, "pressao_arterial", 0.0)))
-        self.temperatura_serie.append(float(index), float(getattr(medicao, "temperatura", 0.0)))
+        mapa_series = {
+        "spo2": "spo2",
+        "temperatura": "temperatura",
+        "pressao_arterial_media": "pressao_arterial",
+        }
 
-        JANELA_MAXIMA = 30
-        if index >= JANELA_MAXIMA:
-            self.axis_x.setRange(index - JANELA_MAXIMA + 1, index)
+        for medicoes in medicao:
+            chave = mapa_series.get(medicoes.parametro.value)
+
+            if chave is None:
+                continue
+
+            self.series_map[chave][0].append(
+                index,
+                float(medicoes.valor),
+            )
+
+        self.axis_x.append(horario, index + 1)
+
+        JANELA_VISIVEL = 30
+
+        if index >= JANELA_VISIVEL:
+            self.axis_x.setRange(
+                index - JANELA_VISIVEL + 1,
+                index + 1,
+            )
         else:
-            self.axis_x.setRange(0, JANELA_MAXIMA)
+            self.axis_x.setRange(
+                0,
+                max(1, index + 1),
+            )
 
-        BUFFER_MAXIMO = 150
-        if self.oxigenio_serie.count() > BUFFER_MAXIMO:
-            self.oxigenio_serie.remove(0)
-            self.pressao_serie.remove(0)
-            self.temperatura_serie.remove(0)
+        primeira_serie = self.series_map["spo2"][0]
+        
+        BUFFER_MAXIMO = 120
+        if primeira_serie.count() > BUFFER_MAXIMO:
+            for series, _, _ in self.series_map.values():
+                series.remove(0)
 
     def _abrir_cadastro_animal(self) -> None:
         dlg = DialogCadastrarAnimal(self.usuario, self)
@@ -531,53 +887,92 @@ class TelaInicial(QMainWindow):
         dlg.exec()
 
     def _carregar_animal_para_monitoramento(self, animal: dict, e_proprietario: bool) -> None:
-        self.paciente["nome"] = animal["nome"]
-        self.paciente["especie"] = animal["especie"]
-        self.paciente["idade"] = animal["idade"]
-        self.paciente["porte"] = animal["porte"].capitalize()
-        self.paciente["procedimento"] = animal["procedimento"]
-        self.paciente["estado_clinico"] = animal["estado_clinico"].capitalize()
+        """Carrega os dados do animal selecionado no diálogo para monitoramento na tela inicial."""
+        # 1. Atualiza o dicionário local do paciente com os dados do MySQL
+        self.paciente["id"] = animal.get("id")
+        self.paciente["nome"] = animal.get("nome", "---")
+        self.paciente["especie"] = animal.get("especie", "---")
+        self.paciente["idade"] = animal.get("idade", 0)
+        self.paciente["porte"] = str(animal.get("porte", "---")).capitalize()
+        self.paciente["procedimento"] = animal.get("procedimento", "Nenhum procedimento selecionado")
+        self.paciente["estado_clinico"] = str(animal.get("estado_clinico", "---")).capitalize()
         self.paciente["ultima_medicacao"] = animal.get("ultima_medicacao") or "Nenhuma"
         self.paciente["quantidade_medicacao"] = animal.get("quantidade") or "N/A"
         self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
+        self.paciente["observacao_docente"] = animal.get("observacao_docente") or ""
 
+        responsavel_db = animal.get("responsavel_aplicacao") or animal.get("responsavel_id")
+        self.paciente["responsavel_id"] = responsavel_db
+
+        # Atualiza as informações visuais na interface
         self.atualizar_informacoes_paciente()
-        if self.simulator is not None:
-            self.simulator.stop()
 
-        id_paciente = str(animal["id"])
-        id_sessao = str(uuid4())
+        # Atualiza a caixa de observação se ela existir na interface
+        if hasattr(self, "campo_observacao"):
+            self.campo_observacao.setText(self.paciente["observacao_docente"])
 
-        self.simulator = SinalVitalSimulacao(
-            id_paciente=id_paciente,
-            id_sessao=id_sessao,
-            parent=self,
-        )
+        # 2. Recupera o ID do usuário logado
+        user_id_logado = self.usuario.get("id") or self.usuario.get("usuario_id")
 
-        self.simulator.measurement_generated.connect(self.update_chart)
-        self.simulator.start()
+        # 3. Compara se o usuário logado é o responsável pelo animal
+        try:
+            e_dono = (int(user_id_logado) == int(responsavel_db)) if (user_id_logado and responsavel_db) else False
+        except (ValueError, TypeError):
+            e_dono = False
 
-        pode_editar = e_proprietario or (self.usuario.get("role") == "Docente")
-        self.btn_editar_paciente.setEnabled(pode_editar)
+        # O aluno pode alterar apenas se for o dono. O docente pode alterar qualquer paciente.
+        pode_alterar = getattr(self, "is_teacher", False) or e_dono or e_proprietario
 
-        if not pode_editar:
+        # Busca o histórico permanente gravado no MySQL para este animal
+        if self.paciente.get("id"):
+            self.historico = carregar_historico_animal(self.paciente["id"])
+            self.atualizar_card_historico()
+
+        # Atualiza a exibição dos botões na interface
+        if hasattr(self, "cadastrar_label"):
+            self.cadastrar_label.show()
+
+        if getattr(self, "is_teacher", False) and hasattr(self, "btn_cadastrar"):
+            self.btn_cadastrar.show()
+
+        if pode_alterar:
+            if hasattr(self, "btn_editar_paciente"):
+                self.btn_editar_paciente.show()
+                self.btn_editar_paciente.setEnabled(True)
+            if hasattr(self, "btn_procedimento"):
+                self.btn_procedimento.show()
+                self.btn_procedimento.setEnabled(True)
+            if hasattr(self, "btn_medicacao"):
+                self.btn_medicacao.show()
+                self.btn_medicacao.setEnabled(True)
+        else:
+            if hasattr(self, "btn_editar_paciente"):
+                self.btn_editar_paciente.hide()
+            if hasattr(self, "btn_procedimento"):
+                self.btn_procedimento.hide()
+            if hasattr(self, "btn_medicacao"):
+                self.btn_medicacao.hide()
+
             QMessageBox.information(
                 self,
                 "Modo Somente Leitura",
-                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro usuário')}. "
-                "Alterações nos dados estão desabilitadas.",
+                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro usuário')}.\n\n"
+                "Ações de edição, procedimento e medicação estão ocultas."
             )
 
+
     def atualizar_informacoes_paciente(self) -> None:
+        cor_destaque = "#287a55" if getattr(self, "is_teacher", False) else "#08b9df"
+
         self.informacoes_paciente.setText(
-            f"<span style='color:#08b9df'><b>Nome:</b></span> {self.paciente['nome']}<br>"
-            f"<span style='color:#08b9df'><b>Espécie:</b></span> {self.paciente['especie']}<br>"
-            f"<span style='color:#08b9df'><b>Idade:</b></span> {self.paciente['idade']} anos<br>"
-            f"<span style='color:#08b9df'><b>Porte:</b></span> {self.paciente['porte']}<br><br>"
-            f"<span style='color:#08b9df'><b>Responsável:</b></span> {self.paciente['medico_procedimento']}<br>"
-            f"<span style='color:#08b9df'><b>Procedimento:</b></span> {self.paciente['procedimento']}<br>"
-            f"<span style='color:#08b9df'><b>Estado Clínico:</b></span> {self.paciente['estado_clinico']}<br>"
-            f"<span style='color:#08b9df'><b>Última Medicação:</b></span> {self.paciente['ultima_medicacao']} "
+            f"<span style='color:{cor_destaque};'><b>Nome:</b></span> {self.paciente['nome']}<br>"
+            f"<span style='color:{cor_destaque};'><b>Espécie:</b></span> {self.paciente['especie']}<br>"
+            f"<span style='color:{cor_destaque};'><b>Idade:</b></span> {self.paciente['idade']} anos<br>"
+            f"<span style='color:{cor_destaque};'><b>Porte:</b></span> {self.paciente['porte']}<br><br>"
+            f"<span style='color:{cor_destaque};'><b>Responsável:</b></span> {self.paciente['medico_procedimento']}<br>"
+            f"<span style='color:{cor_destaque};'><b>Procedimento:</b></span> {self.paciente['procedimento']}<br>"
+            f"<span style='color:{cor_destaque};'><b>Estado Clínico:</b></span> {self.paciente['estado_clinico']}<br>"
+            f"<span style='color:{cor_destaque};'><b>Última Medicação:</b></span> {self.paciente['ultima_medicacao']} "
             f"&nbsp;&nbsp;<b>Qtd:</b> {self.paciente['quantidade_medicacao']}"
         )
 
@@ -619,18 +1014,72 @@ class TelaInicial(QMainWindow):
         card = self.criar_card()
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(6)
 
-        self.historico_label = QLabel()
-        self.historico_label.setTextFormat(Qt.TextFormat.RichText)
-        self.historico_label.setWordWrap(True)
-        self.atualizar_card_historico()
+        # 1. Widget container para os itens do histórico (fundo branco explícito)
+        self.historico_container = QWidget()
+        self.historico_container.setStyleSheet("background-color: #ffffff;")
+        self.historico_layout = QVBoxLayout(self.historico_container)
+        self.historico_layout.setContentsMargins(0, 0, 0, 0)
+        self.historico_layout.setSpacing(6)
 
-        layout.addWidget(self.historico_label)
+        # 2. QScrollArea que isola os logs e o scroll vertical
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setStyleSheet("""
+            QScrollArea, QScrollArea > QWidget > QWidget {
+                background-color: #ffffff;
+                border: none;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+        """)
 
+        scroll_area.setWidget(self.historico_container)
+        # O stretch=1 garante que o scroll ocupe o centro do card sem empurrar o rodapé
+        layout.addWidget(scroll_area, 1)
+
+        # -------------------------------------------------------------
+        # 3. RODAPÉ FIXO DO CARD (FORA DO SCROLL)
+        # -------------------------------------------------------------
+        rodape_layout = QHBoxLayout()
+        rodape_layout.setContentsMargins(0, 4, 0, 0)
+
+        # Botão para baixar relatório / PDF (alinhado à esquerda no rodapé)
+        self.btn_pdf_historico = QPushButton("📄 Baixar PDF")
+        self.btn_pdf_historico.setObjectName("btn_card_animal")
+        self.btn_pdf_historico.setToolTip("Exportar relatório do histórico em PDF")
+        rodape_layout.addWidget(self.btn_pdf_historico, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        rodape_layout.addStretch()
+
+        self.btn_pdf_historico.clicked.connect(self.exportar_relatorio_pdf)
+        
+        rodape_layout.addWidget(self.btn_pdf_historico, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Botão "Ver Mais" (alinhado à direita no rodapé)
         ver_mais = QPushButton("Ver Mais")
         ver_mais.setObjectName("botao_ver_mais")
         ver_mais.clicked.connect(self.ver_historico_completo)
-        layout.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
+        rodape_layout.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # Adiciona a linha de botões fixos no final do layout principal do card
+        layout.addLayout(rodape_layout)
+
+        # Preenche os dados iniciais do histórico
+        self.atualizar_card_historico()
 
         return card
 
@@ -645,106 +1094,285 @@ class TelaInicial(QMainWindow):
             self.atualizar_informacoes_paciente()
 
     def cadastrar_procedimento(self) -> None:
-        if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar procedimentos.")
+        if self.paciente.get("nome") == "---" or not self.paciente.get("id"):
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal para lançar procedimentos."
+            )
             return
 
         dialogo = CadastrarProcedimentoDialog(self.paciente, self)
         if dialogo.exec() == QDialog.DialogCode.Accepted:
             dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["procedimento"] = dados["procedimento"]
-            self.paciente["medico_procedimento"] = dados["medico_procedimento"]
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
+
+            # Pega o ID do usuário logado
+            user_id = self.usuario.get("id") or self.usuario.get("usuario_id")
+
+            # Salva de forma PERMANENTE no banco MySQL
+            sucesso = salvar_historico_procedimento(
+                animal_id=self.paciente["id"],
+                realizado_por=user_id,
+                procedimento=dados["procedimento"],
+            )
+
+            if sucesso:
+                # Recarrega o histórico completo atualizado do banco
+                self.historico = carregar_historico_animal(self.paciente["id"])
+                self.paciente["procedimento"] = dados["procedimento"]
+                self.paciente["medico_procedimento"] = dados["medico_procedimento"]
+
+                self.atualizar_informacoes_paciente()
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Erro",
+                    "Falha ao salvar procedimento no banco de dados.",
+                )
 
     def cadastrar_medicacao(self) -> None:
-        if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar medicações.")
+        if self.paciente.get("nome") == "---" or not self.paciente.get("id"):
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal para lançar medicações."
+            )
             return
 
         dialogo = CadastrarMedicacaoDialog(self.paciente, self)
         if dialogo.exec() == QDialog.DialogCode.Accepted:
             dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["ultima_medicacao"] = dados["medicacao"]
-            self.paciente["quantidade_medicacao"] = f"{dados['quantidade']} {dados['unidade']}"
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
 
+            user_id = self.usuario.get("id") or self.usuario.get("usuario_id")
+            dose = f"{dados['quantidade']} {dados['unidade']}"
+
+            # Salva de forma PERMANENTE no banco MySQL
+            sucesso = salvar_historico_medicacao(
+                animal_id=self.paciente["id"],
+                administrado_por=user_id,
+                medicamento=dados["medicacao"],
+                dose_quantidade=dose,
+            )
+
+            if sucesso:
+                # Recarrega o histórico atualizado do banco
+                self.historico = carregar_historico_animal(self.paciente["id"])
+                self.paciente["ultima_medicacao"] = dados["medicacao"]
+                self.paciente["quantidade_medicacao"] = dose
+
+                self.atualizar_informacoes_paciente()
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Erro",
+                    "Falha ao salvar medicação no banco de dados.",
+                )
     def ver_historico_completo(self) -> None:
         dialogo = HistoricoDialog(self.historico, self)
         dialogo.exec()
-        
+
     def atualizar_card_historico(self) -> None:
+        """Limpa o container e reconstrói os registros sem afetar o rodapé fixo."""
+        while self.historico_layout.count() > 0:
+            item = self.historico_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
         if not self.historico:
-            self.historico_label.setText("Nenhum procedimento ou medicação cadastrada.")
+            lbl_vazio = QLabel("<i>Nenhum procedimento ou medicação cadastrada.</i>")
+            lbl_vazio.setStyleSheet("color: #666666; font-size: 13px; background-color: #ffffff;")
+            self.historico_layout.addWidget(lbl_vazio)
             return
 
-        textos = []
-        for registro in self.historico[:2]:
+        cor_destaque = "#287a55" if getattr(self, "is_teacher", False) else "#08b9df"
+
+        # Exibe os lançamentos dentro da caixa de rolagem
+        for registro in self.historico[:10]:
+            item_widget = QWidget()
+            item_widget.setStyleSheet("background-color: #ffffff;")
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(0, 2, 4, 6)
+            item_layout.setSpacing(6)
+
             if registro.get("tipo") == "Procedimento":
-                textos.append(
-                    f"Procedimento: {registro['procedimento']}<br>"
-                    f"Médico responsável: {registro['medico_procedimento']}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                texto_html = (
+                    f"<span style='color:{cor_destaque};'><b>Procedimento:</b></span> {registro['procedimento']}<br>"
+                    f"<span style='color:{cor_destaque};'><b>Responsável:</b></span> {registro.get('medico_procedimento', '---')}<br>"
+                    f"<small style='color:#666666;'>Data: {registro.get('data', '')} | Hora: {registro.get('hora', '')}</small>"
                 )
             else:
-                textos.append(
-                    f"Responsável: {registro.get('medico_medicacao', '')}<br>"
-                    f"Medicação: {registro.get('medicacao', '')} Qtd: {registro.get('quantidade', '')} {registro.get('unidade', '')}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                texto_html = (
+                    f"<span style='color:{cor_destaque};'><b>Medicação:</b></span> {registro.get('medicacao', '---')} "
+                    f"({registro.get('quantidade', '')})<br>"
+                    f"<span style='color:{cor_destaque};'><b>Responsável:</b></span> {registro.get('medico_medicacao', '---')}<br>"
+                    f"<small style='color:#666666;'>Data: {registro.get('data', '')} | Hora: {registro.get('hora', '')}</small>"
                 )
 
-        self.historico_label.setText("".join(textos))
+            lbl_info = QLabel(texto_html)
+            lbl_info.setTextFormat(Qt.TextFormat.RichText)
+            lbl_info.setWordWrap(True)
+            lbl_info.setStyleSheet("color: #1a1a1a; font-size: 13px; background-color: transparent;")
+            item_layout.addWidget(lbl_info, 1)
+
+            # Botão "X" exclusivo para o perfil de Docente
+            if getattr(self, "is_teacher", False):
+                btn_excluir = QPushButton("✕")
+                btn_excluir.setToolTip("Excluir este registro do histórico")
+                btn_excluir.setFixedSize(22, 22)
+                btn_excluir.setStyleSheet("""
+                    QPushButton {
+                        color: #d9534f;
+                        background-color: transparent;
+                        border: none;
+                        font-weight: bold;
+                        font-size: 14px;
+                        border-radius: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #fde8e8;
+                        color: #c9302c;
+                    }
+                """)
+                btn_excluir.clicked.connect(lambda _, reg=registro: self._excluir_item_historico(reg))
+                item_layout.addWidget(btn_excluir, alignment=Qt.AlignmentFlag.AlignTop)
+
+            self.historico_layout.addWidget(item_widget)
+
+            linha = QFrame()
+            linha.setFrameShape(QFrame.Shape.HLine)
+            linha.setStyleSheet("color: #e0e0e0; background-color: #e0e0e0; max-height: 1px;")
+            self.historico_layout.addWidget(linha)
+
+    def _excluir_item_historico(self, registro: dict) -> None:
+        """Confirma e deleta um registro do histórico permanente no MySQL."""
+        tipo = registro.get("tipo", "Registro")
+        confirmacao = QMessageBox.question(
+            self,
+            "Confirmar Exclusão",
+            f"Deseja realmente excluir este lançamento de {tipo}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if confirmacao == QMessageBox.StandardButton.Yes:
+            reg_id = registro.get("id")
+            sucesso = False
+
+            # 1. Executa a deleção no banco de dados
+            if tipo == "Procedimento":
+                sucesso = deletar_historico_procedimento(reg_id)
+            else:
+                sucesso = deletar_historico_medicacao(reg_id)
+
+            if sucesso:
+                # 2. Garante a atualização da lista interna diretamente do banco de dados
+                animal_id = self.paciente.get("id")
+                if animal_id:
+                    self.historico = carregar_historico_animal(animal_id)
+                else:
+                    # Fallback em memória caso o ID não esteja disponível
+                    self.historico = [item for item in self.historico if item.get("id") != reg_id]
+
+                # 3. Força a reconstrução visual do card
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(self, "Erro", f"Não foi possível excluir o lançamento de {tipo}.")
 
     def _aplicar_estilos(self) -> None:
+        # Define a cor do tema com base no perfil do usuário:
+        # - Verde (#287a55) para Docente / Teacher
+        # - Azul (#08b9df) para Aluno / Student
+        cor_tema = "#287a55" if getattr(self, "is_teacher", False) else "#08b9df"
+        cor_hover_item = "#216746" if getattr(self, "is_teacher", False) else "#078eaa"
+
         self.setStyleSheet(
-            """
-            #cabecalho { background-color: white; border-bottom: 2px solid #e0e0e0; }
-            #cabecalho QLabel { font-size: 14px; color: #555555; }
-            #botao_menu {
+            f"""
+            /* Cabeçalho superior */
+            #cabecalho {{ 
+                background-color: white; 
+                border-bottom: 2px solid #e0e0e0; 
+            }}
+            #cabecalho QLabel {{ 
+                font-size: 14px; 
+                color: #333333; 
+            }}
+            #botao_menu {{
                 background-color: transparent;
-                color: #08b9df;
+                color: {cor_tema};
                 border: none;
                 font-size: 26px;
                 font-weight: bold;
-            }
-            #botao_menu:hover { color: #078eaa; }
-            #layout_fundo { background-color: #08b9df; }
-            #card {
-                background-color: white;
+            }}
+            #botao_menu:hover {{ color: {cor_hover_item}; }}
+
+            /* Layout de Fundo Principal */
+            #layout_fundo {{ 
+                background-color: {cor_tema}; 
+            }}
+
+            /* MENU LATERAL SLIDING / DRAWER VERDE PARA DOCENTE */
+            #menu_lateral, #sidebar, QFrame#menu_lateral {{
+                background-color: {cor_tema};
+                border-right: 2px solid rgba(255, 255, 255, 0.2);
+            }}
+
+            /* Itens e botões do Menu Lateral */
+            #menu_lateral QPushButton, #sidebar QPushButton {{
+                background-color: transparent;
+                color: #ffffff;
+                text-align: left;
+                padding: 10px 16px;
+                font-size: 14px;
+                font-weight: 600;
+                border: none;
+                border-radius: 5px;
+            }}
+            #menu_lateral QPushButton:hover, #sidebar QPushButton:hover {{
+                background-color: {cor_hover_item};
+            }}
+
+            /* Rótulos e Títulos dentro do Menu Lateral */
+            #menu_lateral QLabel, #sidebar QLabel {{
+                color: #ffffff;
+                font-weight: bold;
+            }}
+
+            /* Cards mantidos em branco para contraste */
+            #card {{
+                background-color: #ffffff;
                 border: none;
                 border-radius: 10px;
-            }
-            #titulo_secao {
-                color: white;
+            }}
+            #card QLabel {{ 
+                color: #1a1a1a; 
+                font-size: 14px; 
+            }}
+            #card QLabel b {{ 
+                color: {cor_tema}; 
+            }}
+
+            #titulo_secao {{
+                color: #ffffff;
                 font-size: 16px;
                 font-weight: bold;
-            }
-            #card QLabel { color: black; font-size: 14px; }
-            #card QLabel b { color: #08b9df; }
-            #botao_ver_mais {
-                color: #2100b8;
-                background-color: transparent;
-                border: none;
-                font-size: 13px;
-                font-weight: bold;
-            }
-            #titulo_cadastrar {
-                color: #2100b8;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            #btn_card_animal {
-                background-color: #287a55;
-                color: white;
+            }}
+
+            #btn_card_animal {{
+                background-color: {cor_tema};
+                color: #ffffff;
                 border: none;
                 padding: 6px 12px;
                 border-radius: 5px;
                 font-weight: 600;
                 font-size: 12px;
-            }
-            #btn_card_animal:hover { background-color: #216746; }
+            }}
+            #btn_card_animal:hover {{ 
+                background-color: {cor_hover_item}; 
+            }}
+
+            QTextEdit, QLineEdit {{
+                background-color: #ffffff;
+                color: #1a1a1a;
+            }}
             """
         )

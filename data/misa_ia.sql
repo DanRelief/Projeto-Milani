@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS animais (
         ON UPDATE CASCADE
 );
 
+#ALTER TABLE animais 
+#ADD COLUMN observacao_docente TEXT DEFAULT NULL AFTER quantidade;
+
 -- 3. Sessões de monitoramento
 CREATE TABLE IF NOT EXISTS sessoes_monitoramento (
     id VARCHAR(36) PRIMARY KEY,
@@ -145,4 +148,46 @@ CREATE TABLE IF NOT EXISTS eventos_alerta (
         sessao_id,
         data_hora
     )
+);
+
+-- 1. Histórico Permanente de Procedimentos
+CREATE TABLE IF NOT EXISTS historico_procedimentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    animal_id INT NOT NULL,
+    realizado_por INT NOT NULL, -- ID do aluno/docente que realizou
+    procedimento VARCHAR(255) NOT NULL,
+    descricao_detalhada TEXT DEFAULT NULL,
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_proc_animal 
+        FOREIGN KEY (animal_id) REFERENCES animais(id) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_proc_usuario 
+        FOREIGN KEY (realizado_por) REFERENCES usuarios(id) 
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+
+    INDEX idx_proc_animal_data (animal_id, data_hora)
+);
+
+-- 2. Histórico Permanente de Medicações Administradas
+CREATE TABLE IF NOT EXISTS historico_medicacoes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    animal_id INT NOT NULL,
+    administrado_por INT NOT NULL, -- ID do aluno/docente que aplicou
+    medicamento VARCHAR(100) NOT NULL,
+    dose_quantidade VARCHAR(100) NOT NULL,
+    via_administracao VARCHAR(50) DEFAULT NULL, -- Ex: IV, IM, SC, Oral
+    observacao TEXT DEFAULT NULL,
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_med_animal 
+        FOREIGN KEY (animal_id) REFERENCES animais(id) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_med_usuario 
+        FOREIGN KEY (administrado_por) REFERENCES usuarios(id) 
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+
+    INDEX idx_med_animal_data (animal_id, data_hora)
 );
