@@ -3,6 +3,12 @@ from uuid import uuid4
 
 from src.infrastructure.database import salvar_observacao_docente
 
+from ..infrastructure.database import (
+    carregar_historico_animal,
+    salvar_historico_medicacao,
+    salvar_historico_procedimento,
+)
+
 from PySide6.QtPrintSupport import QPrinter
 
 from PySide6.QtCore import (
@@ -673,7 +679,7 @@ class TelaInicial(QMainWindow):
             layout.addWidget(self.btn_salvar_obs, alignment=Qt.AlignmentFlag.AlignRight)
 
         # 5. Seção AÇÕES DO ANIMAL
-        self.cadastrar_label = QLabel("AÇÕES DO ANIMAL")
+        self.cadastrar_label = QLabel("")
         self.cadastrar_label.setObjectName("titulo_cadastrar")
         self.cadastrar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.cadastrar_label.hide()
@@ -842,6 +848,80 @@ class TelaInicial(QMainWindow):
         dlg.animal_selecionado.connect(self._carregar_animal_para_monitoramento)
         dlg.exec()
 
+    def _carregar_animal_para_monitoramento(self, animal: dict, e_proprietario: bool) -> None:
+        """Carrega os dados do animal selecionado no diálogo para monitoramento na tela inicial."""
+        # 1. Atualiza o dicionário local do paciente com os dados do MySQL
+        self.paciente["id"] = animal.get("id")
+        self.paciente["nome"] = animal.get("nome", "---")
+        self.paciente["especie"] = animal.get("especie", "---")
+        self.paciente["idade"] = animal.get("idade", 0)
+        self.paciente["porte"] = str(animal.get("porte", "---")).capitalize()
+        self.paciente["procedimento"] = animal.get("procedimento", "Nenhum procedimento selecionado")
+        self.paciente["estado_clinico"] = str(animal.get("estado_clinico", "---")).capitalize()
+        self.paciente["ultima_medicacao"] = animal.get("ultima_medicacao") or "Nenhuma"
+        self.paciente["quantidade_medicacao"] = animal.get("quantidade") or "N/A"
+        self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
+        self.paciente["observacao_docente"] = animal.get("observacao_docente") or ""
+
+        responsavel_db = animal.get("responsavel_aplicacao") or animal.get("responsavel_id")
+        self.paciente["responsavel_id"] = responsavel_db
+
+        # Atualiza as informações visuais na interface
+        self.atualizar_informacoes_paciente()
+
+        # Atualiza a caixa de observação se ela existir na interface
+        if hasattr(self, "campo_observacao"):
+            self.campo_observacao.setText(self.paciente["observacao_docente"])
+
+        # 2. Recupera o ID do usuário logado
+        user_id_logado = self.usuario.get("id") or self.usuario.get("usuario_id")
+
+        # 3. Compara se o usuário logado é o responsável pelo animal
+        try:
+            e_dono = (int(user_id_logado) == int(responsavel_db)) if (user_id_logado and responsavel_db) else False
+        except (ValueError, TypeError):
+            e_dono = False
+
+        # O aluno pode alterar apenas se for o dono. O docente pode alterar qualquer paciente.
+        pode_alterar = getattr(self, "is_teacher", False) or e_dono or e_proprietario
+
+        # Busca o histórico permanente gravado no MySQL para este animal
+        if self.paciente.get("id"):
+            self.historico = carregar_historico_animal(self.paciente["id"])
+            self.atualizar_card_historico()
+
+        # Atualiza a exibição dos botões na interface
+        if hasattr(self, "cadastrar_label"):
+            self.cadastrar_label.show()
+
+        if getattr(self, "is_teacher", False) and hasattr(self, "btn_cadastrar"):
+            self.btn_cadastrar.show()
+
+        if pode_alterar:
+            if hasattr(self, "btn_editar_paciente"):
+                self.btn_editar_paciente.show()
+                self.btn_editar_paciente.setEnabled(True)
+            if hasattr(self, "btn_procedimento"):
+                self.btn_procedimento.show()
+                self.btn_procedimento.setEnabled(True)
+            if hasattr(self, "btn_medicacao"):
+                self.btn_medicacao.show()
+                self.btn_medicacao.setEnabled(True)
+        else:
+            if hasattr(self, "btn_editar_paciente"):
+                self.btn_editar_paciente.hide()
+            if hasattr(self, "btn_procedimento"):
+                self.btn_procedimento.hide()
+            if hasattr(self, "btn_medicacao"):
+                self.btn_medicacao.hide()
+
+            QMessageBox.information(
+                self,
+                "Modo Somente Leitura",
+                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro usuário')}.\n\n"
+                "Ações de edição, procedimento e medicação estão ocultas."
+            )
+
 
     def atualizar_informacoes_paciente(self) -> None:
         cor_destaque = "#287a55" if getattr(self, "is_teacher", False) else "#08b9df"
@@ -930,33 +1010,77 @@ class TelaInicial(QMainWindow):
             self.atualizar_informacoes_paciente()
 
     def cadastrar_procedimento(self) -> None:
-        if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar procedimentos.")
+        if self.paciente.get("nome") == "---" or not self.paciente.get("id"):
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal para lançar procedimentos."
+            )
             return
 
         dialogo = CadastrarProcedimentoDialog(self.paciente, self)
         if dialogo.exec() == QDialog.DialogCode.Accepted:
             dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["procedimento"] = dados["procedimento"]
-            self.paciente["medico_procedimento"] = dados["medico_procedimento"]
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
+
+            # Pega o ID do usuário logado
+            user_id = self.usuario.get("id") or self.usuario.get("usuario_id")
+
+            # Salva de forma PERMANENTE no banco MySQL
+            sucesso = salvar_historico_procedimento(
+                animal_id=self.paciente["id"],
+                realizado_por=user_id,
+                procedimento=dados["procedimento"],
+            )
+
+            if sucesso:
+                # Recarrega o histórico completo atualizado do banco
+                self.historico = carregar_historico_animal(self.paciente["id"])
+                self.paciente["procedimento"] = dados["procedimento"]
+                self.paciente["medico_procedimento"] = dados["medico_procedimento"]
+
+                self.atualizar_informacoes_paciente()
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Erro",
+                    "Falha ao salvar procedimento no banco de dados.",
+                )
 
     def cadastrar_medicacao(self) -> None:
-        if self.paciente["nome"] == "---":
-            QMessageBox.warning(self, "Aviso", "Selecione um animal para lançar medicações.")
+        if self.paciente.get("nome") == "---" or not self.paciente.get("id"):
+            QMessageBox.warning(
+                self, "Aviso", "Selecione um animal para lançar medicações."
+            )
             return
 
         dialogo = CadastrarMedicacaoDialog(self.paciente, self)
         if dialogo.exec() == QDialog.DialogCode.Accepted:
             dados = dialogo.dados()
-            self.historico.insert(0, dados)
-            self.paciente["ultima_medicacao"] = dados["medicacao"]
-            self.paciente["quantidade_medicacao"] = f"{dados['quantidade']} {dados['unidade']}"
-            self.atualizar_informacoes_paciente()
-            self.atualizar_card_historico()
 
+            user_id = self.usuario.get("id") or self.usuario.get("usuario_id")
+            dose = f"{dados['quantidade']} {dados['unidade']}"
+
+            # Salva de forma PERMANENTE no banco MySQL
+            sucesso = salvar_historico_medicacao(
+                animal_id=self.paciente["id"],
+                administrado_por=user_id,
+                medicamento=dados["medicacao"],
+                dose_quantidade=dose,
+            )
+
+            if sucesso:
+                # Recarrega o histórico atualizado do banco
+                self.historico = carregar_historico_animal(self.paciente["id"])
+                self.paciente["ultima_medicacao"] = dados["medicacao"]
+                self.paciente["quantidade_medicacao"] = dose
+
+                self.atualizar_informacoes_paciente()
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Erro",
+                    "Falha ao salvar medicação no banco de dados.",
+                )
     def ver_historico_completo(self) -> None:
         dialogo = HistoricoDialog(self.historico, self)
         dialogo.exec()

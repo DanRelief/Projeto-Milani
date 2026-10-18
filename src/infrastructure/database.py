@@ -174,3 +174,118 @@ def salvar_medicao_sinal_vital(sessao_id: str, parametro: str, valor: float, uni
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+
+def salvar_historico_procedimento(
+    animal_id: int, realizado_por: int, procedimento: str
+) -> bool:
+    """Insere um novo procedimento no banco de dados."""
+    try:
+        conexao = get_db_connection()
+        cursor = conexao.cursor()
+        query = """
+            INSERT INTO historico_procedimentos (animal_id, realizado_por, procedimento, data_hora)
+            VALUES (%s, %s, %s, NOW());
+        """
+        cursor.execute(query, (animal_id, realizado_por, procedimento))
+
+        # Atualiza o último procedimento registrado na tabela de animais
+        query_update = "UPDATE animais SET procedimento = %s WHERE id = %s;"
+        cursor.execute(query_update, (procedimento, animal_id))
+
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Exception as err:
+        print(f"Erro ao salvar procedimento: {err}")
+        return False
+
+
+def salvar_historico_medicacao(
+    animal_id: int,
+    administrado_por: int,
+    medicamento: str,
+    dose_quantidade: str,
+) -> bool:
+    """Insere uma nova medicação no banco de dados."""
+    try:
+        conexao = get_db_connection()
+        cursor = conexao.cursor()
+        query = """
+            INSERT INTO historico_medicacoes (animal_id, administrado_por, medicamento, dose_quantidade, data_hora)
+            VALUES (%s, %s, %s, %s, NOW());
+        """
+        cursor.execute(
+            query, (animal_id, administrado_por, medicamento, dose_quantidade)
+        )
+
+        # Atualiza a última medicação e dose na tabela de animais
+        query_update = """
+            UPDATE animais 
+            SET ultima_medicacao = %s, quantidade = %s 
+            WHERE id = %s;
+        """
+        cursor.execute(query_update, (medicamento, dose_quantidade, animal_id))
+
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Exception as err:
+        print(f"Erro ao salvar medicação: {err}")
+        return False
+
+
+def carregar_historico_animal(animal_id: int) -> list[dict]:
+    """Busca o histórico unificado de procedimentos e medicações do animal no banco."""
+    historico_unificado = []
+    try:
+        conexao = get_db_connection()
+        cursor = conexao.cursor(dictionary=True)
+
+        # 1. Busca procedimentos
+        query_proc = """
+            SELECT 
+                'Procedimento' AS tipo,
+                hp.procedimento AS procedimento,
+                u.nome AS medico_procedimento,
+                DATE_FORMAT(hp.data_hora, '%d/%m/%Y') AS data,
+                DATE_FORMAT(hp.data_hora, '%H:%i') AS hora,
+                hp.data_hora
+            FROM historico_procedimentos hp
+            INNER JOIN usuarios u ON hp.realizado_por = u.id
+            WHERE hp.animal_id = %s
+        """
+        cursor.execute(query_proc, (animal_id,))
+        procedimentos = cursor.fetchall()
+
+        # 2. Busca medicações
+        query_med = """
+            SELECT 
+                'Medicação' AS tipo,
+                hm.medicamento AS medicacao,
+                hm.dose_quantidade AS quantidade,
+                '' AS unidade,
+                u.nome AS medico_medicacao,
+                DATE_FORMAT(hm.data_hora, '%d/%m/%Y') AS data,
+                DATE_FORMAT(hm.data_hora, '%H:%i') AS hora,
+                hm.data_hora
+            FROM historico_medicacoes hm
+            INNER JOIN usuarios u ON hm.administrado_por = u.id
+            WHERE hm.animal_id = %s
+        """
+        cursor.execute(query_med, (animal_id,))
+        medicacoes = cursor.fetchall()
+
+        # Unifica e ordena do mais recente para o mais antigo
+        historico_unificado = procedimentos + medicacoes
+        historico_unificado.sort(
+            key=lambda x: x.get("data_hora"), reverse=True
+        )
+
+        cursor.close()
+        conexao.close()
+    except Exception as err:
+        print(f"Erro ao carregar histórico do banco: {err}")
+
+    return historico_unificado
