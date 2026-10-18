@@ -8,6 +8,10 @@ class EstadoMonitoramento(str, Enum):
     ALERTA = "alerta"
     RECUPERACAO = "recuperacao"
 
+class DirecaoAlteracao(str, Enum):
+    QUEDA = "queda"
+    AUMENTO = "aumento"
+    AMBAS = "ambas"
 
 @dataclass
 class ConfiguracaoRegra:
@@ -18,6 +22,8 @@ class ConfiguracaoRegra:
     janelas_recuperacao: int = 2
 
     qualidade_minima: float = 0.8
+
+    direcao: DirecaoAlteracao = DirecaoAlteracao.AMBAS
 
 
 @dataclass
@@ -65,9 +71,9 @@ class MotorRegraParametro:
 
         magnitude_z = abs(z_robusto)
 
-        alteracao = (magnitude_z >= self.configuracao.limiar_entrada_z)
+        alteracao = (self.esta_em_alteracao(z_robusto))
 
-        recuperado = (magnitude_z <= self.configuracao.limiar_saida_z)
+        recuperado = (self.esta_recuperado(z_robusto))
 
         self._atualizar_estado(alteracao=alteracao,recuperado=recuperado,)
 
@@ -132,3 +138,35 @@ class MotorRegraParametro:
             f"{z_robusto:.2f}; "
             f"estado = {self.estado.value}."
         )
+    
+    def esta_em_alteracao(self,z_robusto: float,) -> bool:
+
+        direcao = (self.configuracao.direcao)
+
+        limiar = (self.configuracao.limiar_entrada_z)
+
+        if direcao == DirecaoAlteracao.QUEDA:
+
+            return (z_robusto <= -limiar)
+
+        if direcao == DirecaoAlteracao.AUMENTO:
+
+            return (z_robusto >= limiar)
+
+        return (abs(z_robusto) >= limiar)
+
+    def esta_recuperado(self,z_robusto: float,) -> bool:
+
+        direcao = (self.configuracao.direcao)
+
+        limiar = (self.configuracao.limiar_saida_z)
+
+        if direcao == DirecaoAlteracao.QUEDA:
+
+            return (z_robusto >= -limiar)
+
+        if direcao == DirecaoAlteracao.AUMENTO:
+
+            return (z_robusto <= limiar)
+
+        return (abs(z_robusto) <= limiar)

@@ -3,7 +3,11 @@ from src.ia.rules.motor_regras import (
     EstadoMonitoramento,
     MotorRegraParametro,
 )
-
+from src.ia.rules.motor_regras import (
+    ConfiguracaoRegra,
+    DirecaoAlteracao,
+    MotorRegraParametro,
+)
 
 def test_persistencia_e_histerese():
 
@@ -110,4 +114,80 @@ def test_qualidade_sinal_baixa():
     assert (
         resultado.estado
         == EstadoMonitoramento.NORMAL
+    )
+
+def test_regra_queda_ignora_z_positivo():
+
+    motor = MotorRegraParametro(
+        ConfiguracaoRegra(
+            direcao=DirecaoAlteracao.QUEDA,
+        )
+    )
+
+    resultado = motor.processar(
+        z_robusto=4.0,
+        qualidade_sinal=1.0,
+    )
+
+    assert (
+        resultado.alteracao_detectada
+        is False
+    )
+
+def test_regra_queda_detecta_z_negativo():
+
+    motor = MotorRegraParametro(
+        ConfiguracaoRegra(
+            direcao=DirecaoAlteracao.QUEDA,
+        )
+    )
+
+    resultado = motor.processar(
+        z_robusto=-4.0,
+        qualidade_sinal=1.0,
+    )
+
+    assert (
+        resultado.alteracao_detectada
+        is True
+    )
+
+def test_regra_ambas_detecta_as_duas_direcoes():
+
+    configuracao = ConfiguracaoRegra(
+        direcao=DirecaoAlteracao.AMBAS,
+    )
+
+    motor_positivo = MotorRegraParametro(
+        configuracao
+    )
+
+    resultado_positivo = (
+        motor_positivo.processar(
+            z_robusto=4.0,
+            qualidade_sinal=1.0,
+        )
+    )
+
+    motor_negativo = MotorRegraParametro(
+        configuracao
+    )
+
+    resultado_negativo = (
+        motor_negativo.processar(
+            z_robusto=-4.0,
+            qualidade_sinal=1.0,
+        )
+    )
+
+    assert (
+        resultado_positivo
+        .alteracao_detectada
+        is True
+    )
+
+    assert (
+        resultado_negativo
+        .alteracao_detectada
+        is True
     )
