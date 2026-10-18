@@ -34,6 +34,8 @@ from .dialogs.historico_ver_mais_dialog import HistoricoDialog
 
 from .cadastrar_animal import DialogCadastrarAnimal
 from .selecionar_animal import DialogSelecionarAnimal
+from ..application.monitoramento.controlador_monitoramento import ControladorMonitoramento
+from ..domain.measurement import ParametroVital
 
 class TelaInicial(QMainWindow):
     logout_requested = Signal()
@@ -44,6 +46,7 @@ class TelaInicial(QMainWindow):
         self.setWindowTitle("M.I.S.A - Tela Inicial")
         self.resize(1024, 720)
         self.setMinimumSize(900, 650)
+        self.indice_grafico = 0
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -63,6 +66,14 @@ class TelaInicial(QMainWindow):
 
         # Inicializa o simulador de sinais vitais
         self.simulator = None
+        self.controlador_monitoramento = ControladorMonitoramento(parent=self)
+        self.controlador_monitoramento.medicoes_atualizadas.connect(self.update_chart)
+
+        self.controlador_monitoramento.spo2_atualizada.connect(self.atualizar_spo2)
+        self.controlador_monitoramento.temperatura_atualizada.connect(self.atualizar_temperatura)
+        self.controlador_monitoramento.pam_atualizada.connect(self.atualizar_pam)
+
+        self.controlador_monitoramento.resumo_monitoramento_atualizado.connect(self.atualizar_resumo_monitoramento)
 
         # Widget Central e Layout Principal
         central = QWidget()
@@ -360,9 +371,9 @@ class TelaInicial(QMainWindow):
         card_alertas = self.criar_card_alerta_ia()
 
         card_paciente.setFixedHeight(340)
-        card_historico.setFixedHeight(240)
+        card_historico.setFixedHeight(280)
         card_monitoramento.setFixedHeight(420)
-        card_alertas.setFixedHeight(140)
+        card_alertas.setFixedHeight(180)
 
         coluna_esquerda = QVBoxLayout()
         coluna_direita = QVBoxLayout()
@@ -445,12 +456,88 @@ class TelaInicial(QMainWindow):
         btn_medicacao.setObjectName("btn_card_animal")
         btn_medicacao.clicked.connect(self.cadastrar_medicacao)
 
+        self.btn_simular_queda_spo2 = (
+            QPushButton(
+                "Queda SpO₂"
+            )
+        )
+
+        self.btn_simular_queda_pam = (
+            QPushButton(
+                "Queda PAM"
+            )
+        )
+
+        self.btn_simular_temperatura = (
+            QPushButton(
+                "Aumentar Temp."
+            )
+        )
+
+        self.btn_restaurar_sinais = (
+            QPushButton(
+                "Restaurar"
+            )
+        )
+
+        for botao in (
+            self.btn_simular_queda_spo2,
+            self.btn_simular_queda_pam,
+            self.btn_simular_temperatura,
+            self.btn_restaurar_sinais,
+        ):
+            botao.setObjectName(
+                "btn_card_animal"
+            )
+
         linha_cadastro_eventos.addStretch()
         linha_cadastro_eventos.addWidget(btn_procedimento)
         linha_cadastro_eventos.addWidget(btn_medicacao)
         linha_cadastro_eventos.addStretch()
 
         layout.addLayout(linha_cadastro_eventos)
+
+        self.btn_simular_queda_spo2.clicked.connect(
+        self.simular_queda_spo2
+    )
+
+        self.btn_simular_queda_pam.clicked.connect(
+            self.simular_queda_pam
+        )
+
+        self.btn_simular_temperatura.clicked.connect(
+            self.simular_aumento_temperatura
+        )
+
+        self.btn_restaurar_sinais.clicked.connect(
+            self.restaurar_sinais_teste
+        )
+
+        linha_simulacao = QHBoxLayout()
+
+        linha_simulacao.addStretch()
+
+        linha_simulacao.addWidget(
+            self.btn_simular_queda_spo2
+        )
+
+        linha_simulacao.addWidget(
+            self.btn_simular_queda_pam
+        )
+
+        linha_simulacao.addWidget(
+            self.btn_simular_temperatura
+        )
+
+        linha_simulacao.addWidget(
+            self.btn_restaurar_sinais
+        )
+
+        linha_simulacao.addStretch()
+
+        layout.addLayout(
+            linha_simulacao
+        )
 
         return card
 
@@ -460,6 +547,31 @@ class TelaInicial(QMainWindow):
         card = self.criar_card()
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 10, 10, 10)
+        linha_valores = QHBoxLayout()
+
+        self.valor_spo2 = QLabel("SpO₂\n-- %")
+        self.valor_temperatura = QLabel("Temperatura\n-- °C")
+        self.valor_pam = QLabel("PAM\n-- mmHg")
+
+        for label in (self.valor_spo2,self.valor_temperatura,self.valor_pam,):
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            label.setStyleSheet(
+                """
+                QLabel {
+                    background-color: #f5f7f9;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+                """
+            )
+
+        linha_valores.addWidget(self.valor_spo2)
+        linha_valores.addWidget(self.valor_temperatura)
+        linha_valores.addWidget(self.valor_pam)
+        layout.addLayout(linha_valores)
 
         self.grafico = QChart()
         self.grafico.setTitle("Sinais Vitais e Agentes Inalatórios")
@@ -509,8 +621,8 @@ class TelaInicial(QMainWindow):
     def update_chart(self, medicao) -> None:
         if not medicao:
             return
-        serie_referencia = self.series_map["spo2"][0]
-        index = serie_referencia.count()
+        index = self.indice_grafico
+        self.indice_grafico += 1
         horario = medicao[0].data_hora.strftime("%H:%M:%S")
 
         # Dicionário dinâmico com fallback seguro (pega do atributo da medição ou usa 0.0)
@@ -531,19 +643,24 @@ class TelaInicial(QMainWindow):
                 float(medicoes.valor),
             )
 
-        self.axis_x.append(horario, index + 1)
-
         JANELA_VISIVEL = 30
 
-        if index >= JANELA_VISIVEL:
-            self.axis_x.setRange(
-                index - JANELA_VISIVEL + 1,
-                index + 1,
-            )
-        else:
-            self.axis_x.setRange(
-                0,
-                max(1, index + 1),
+        inicio_visivel = max(
+            0,
+            index - JANELA_VISIVEL + 1,
+        )
+
+        self.axis_x.setRange(
+            inicio_visivel,
+            max(1, index + 1),
+        )
+
+        # Exibe um horário a cada 5 leituras,
+        # para não poluir o eixo X.
+        if index % 5 == 0:
+            self.axis_x.append(
+                horario,
+                index,
             )
 
         primeira_serie = self.series_map["spo2"][0]
@@ -569,17 +686,48 @@ class TelaInicial(QMainWindow):
         self.paciente["idade"] = animal["idade"]
         self.paciente["porte"] = animal["porte"].capitalize()
         self.paciente["procedimento"] = animal["procedimento"]
-        self.paciente["estado_clinico"] = animal["estado_clinico"].capitalize()
-        self.paciente["ultima_medicacao"] = animal.get("ultima_medicacao") or "Nenhuma"
-        self.paciente["quantidade_medicacao"] = animal.get("quantidade") or "N/A"
-        self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
+        self.paciente["estado_clinico"] = (
+            animal["estado_clinico"].capitalize()
+        )
+
+        self.paciente["ultima_medicacao"] = (
+            animal.get("ultima_medicacao")
+            or "Nenhuma"
+        )
+
+        self.paciente["quantidade_medicacao"] = (
+            animal.get("quantidade")
+            or "N/A"
+        )
+
+        self.paciente["medico_procedimento"] = (
+            animal.get(
+                "nome_responsavel",
+                "Desconhecido",
+            )
+        )
 
         self.atualizar_informacoes_paciente()
+
+        # Para o simulador do paciente anterior.
         if self.simulator is not None:
             self.simulator.stop()
 
-        id_paciente = str(animal["id"])
-        id_sessao = str(uuid4())
+        # Limpa o gráfico ANTES da nova sessão.
+        self.limpar_grafico_monitoramento()
+
+        id_paciente = str(
+            animal["id"]
+        )
+
+        id_sessao = str(
+            uuid4()
+        )
+
+        self.controlador_monitoramento.iniciar_sessao(
+            id_paciente=id_paciente,
+            id_sessao=id_sessao,
+        )
 
         self.simulator = SinalVitalSimulacao(
             id_paciente=id_paciente,
@@ -587,18 +735,40 @@ class TelaInicial(QMainWindow):
             parent=self,
         )
 
-        self.simulator.measurement_generated.connect(self.update_chart)
+        self.alerta_ia_label.setText(
+            "<b>Monitoramento iniciado.</b><br>"
+            "Analisando os sinais vitais "
+            "do paciente em tempo real."
+        )
+
+        self.simulator.measurement_generated.connect(
+            self.controlador_monitoramento
+            .processar_medicoes
+        )
+
+        # Agora inicia e NÃO para depois.
         self.simulator.start()
 
-        pode_editar = e_proprietario or (self.usuario.get("role") == "Docente")
-        self.btn_editar_paciente.setEnabled(pode_editar)
+        pode_editar = (
+            e_proprietario
+            or
+            self.usuario.get("role")
+            == "Docente"
+        )
+
+        self.btn_editar_paciente.setEnabled(
+            pode_editar
+        )
 
         if not pode_editar:
             QMessageBox.information(
                 self,
                 "Modo Somente Leitura",
-                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro usuário')}. "
-                "Alterações nos dados estão desabilitadas.",
+                (
+                    "Você está monitorando o paciente de "
+                    f"{animal.get('nome_responsavel', 'outro usuário')}. "
+                    "Alterações nos dados estão desabilitadas."
+                ),
             )
 
     def atualizar_informacoes_paciente(self) -> None:
@@ -640,12 +810,12 @@ class TelaInicial(QMainWindow):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 10)
 
-        alerta = QLabel(
+        self.alerta_ia_label = QLabel(
             "Selecione ou cadastre um animal para visualizar as análises em tempo real e alertas da IA."
         )
-        alerta.setTextFormat(Qt.TextFormat.RichText)
-        alerta.setWordWrap(True)
-        layout.addWidget(alerta)
+        self.alerta_ia_label.setTextFormat(Qt.TextFormat.RichText)
+        self.alerta_ia_label.setWordWrap(True)
+        layout.addWidget(self.alerta_ia_label)
         return card
 
     def criar_card_historico(self) -> QFrame:
@@ -780,4 +950,289 @@ class TelaInicial(QMainWindow):
             }
             #btn_card_animal:hover { background-color: #216746; }
             """
+        )
+
+    def atualizar_spo2(self,valor: float,) -> None:
+        self.valor_spo2.setText(f"SpO₂\n{valor:.1f} %")
+
+    def atualizar_temperatura(self,valor: float,) -> None:
+        self.valor_temperatura.setText(f"Temperatura\n{valor:.1f} °C")
+
+    def atualizar_pam(self,valor: float,) -> None:
+        self.valor_pam.setText(f"PAM\n{valor:.0f} mmHg")
+
+    def atualizar_resumo_monitoramento(self,resumo: dict,) -> None:
+
+        status = resumo[
+            "status_geral"
+        ]
+
+        analises = resumo[
+            "analises"
+        ]
+
+        if status == "aquecimento":
+
+            quantidade_prontas = sum(
+                analise["status"]
+                != "aquecimento"
+                for analise
+                in analises.values()
+            )
+
+            self.alerta_ia_label.setText(
+                "<b>Inicializando análises...</b><br>"
+                f"Parâmetros processados: "
+                f"{quantidade_prontas}/3"
+            )
+
+            return
+
+        if status == "alerta":
+
+            analises_alerta = [
+                analise
+                for analise
+                in analises.values()
+                if analise["status"]
+                == "alerta"
+            ]
+
+            textos = [
+                "<b>⚠ ALERTA DE ALTERAÇÃO</b>"
+            ]
+
+            for analise in analises_alerta:
+
+                texto_z = self._formatar_z(
+                    analise.get(
+                        "z_robusto"
+                    )
+                )
+
+                textos.append(
+                    f"<b>{analise['nome']}:</b> "
+                    f"{analise['valor']:.2f} "
+                    f"{analise['unidade']} "
+                    f"| Z = {texto_z}"
+                )
+
+            self.alerta_ia_label.setText(
+                "<br>".join(
+                    textos
+                )
+            )
+
+            return
+
+        if status == "observacao":
+
+            observacoes = [
+                analise
+                for analise
+                in analises.values()
+                if analise["status"]
+                == "observacao"
+            ]
+
+            textos = [
+                "<b>◷ Alteração em observação</b>"
+            ]
+
+            for analise in observacoes:
+
+                texto_z = self._formatar_z(
+                    analise.get(
+                        "z_robusto"
+                    )
+                )
+
+                textos.append(
+                    f"{analise['nome']}: "
+                    f"{analise['valor']:.2f} "
+                    f"{analise['unidade']} "
+                    f"| Z = {texto_z}"
+                )
+
+            textos.append(
+                "Aguardando persistência "
+                "da alteração."
+            )
+
+            self.alerta_ia_label.setText(
+                "<br>".join(
+                    textos
+                )
+            )
+
+            return
+
+        if status == "recuperacao":
+
+            recuperacoes = [
+                analise
+                for analise
+                in analises.values()
+                if analise["status"]
+                == "recuperacao"
+            ]
+
+            textos = [
+                "<b>↗ Sinal em recuperação</b>"
+            ]
+
+            for analise in recuperacoes:
+
+                texto_z = self._formatar_z(
+                    analise.get(
+                        "z_robusto"
+                    )
+                )
+
+                textos.append(
+                    f"{analise['nome']}: "
+                    f"{analise['valor']:.2f} "
+                    f"{analise['unidade']} "
+                    f"| Z = {texto_z}"
+                )
+
+            self.alerta_ia_label.setText(
+                "<br>".join(
+                    textos
+                )
+            )
+
+            return
+
+        if status == "indisponivel":
+
+            self.alerta_ia_label.setText(
+                "<b>⚠ Análise temporariamente "
+                "indisponível.</b><br>"
+                "Verificando qualidade ou "
+                "variabilidade dos sinais."
+            )
+
+            return
+
+        # NORMAL
+
+        textos = [
+            "<b>✓ Monitoramento normal</b>"
+        ]
+
+        ordem = [
+            ParametroVital.SPO2,
+            ParametroVital.TEMPERATURA,
+            ParametroVital.PRESSAO_ARTERIAL_MEDIA,
+        ]
+
+        for parametro in ordem:
+
+            analise = analises.get(
+                parametro
+            )
+
+            if analise is None:
+                continue
+
+            if (
+                analise["status"]
+                != "normal"
+            ):
+                continue
+
+            texto_z = self._formatar_z(
+                analise.get(
+                    "z_robusto"
+                )
+            )
+
+            textos.append(
+                f"{analise['nome']}: "
+                f"{analise['valor']:.2f} "
+                f"{analise['unidade']} "
+                f"| Z = {texto_z}"
+            )
+
+        self.alerta_ia_label.setText(
+            "<br>".join(
+                textos
+            )
+        )
+
+    @staticmethod
+    def _formatar_z(z_robusto,) -> str:
+
+        if z_robusto is None:
+            return "N/A"
+
+        return f"{z_robusto:.2f}"
+
+    def simular_queda_spo2(self,) -> None:
+
+        if self.simulator is None:
+            return
+
+        self.simulator.simular_queda_spo2(
+            quantidade=3.0
+        )
+
+
+    def simular_queda_pam(
+        self,
+    ) -> None:
+
+        if self.simulator is None:
+            return
+
+        self.simulator.simular_queda_pam(
+            quantidade=15.0
+        )
+
+
+    def simular_aumento_temperatura(
+        self,
+    ) -> None:
+
+        if self.simulator is None:
+            return
+
+        self.simulator.simular_aumento_temperatura(
+            quantidade=0.8
+        )
+
+
+    def restaurar_sinais_teste(
+        self,
+    ) -> None:
+
+        if self.simulator is None:
+            return
+
+        self.simulator.restaurar_sinais_teste()
+
+
+    def limpar_grafico_monitoramento(self,) -> None:
+
+        self.indice_grafico = 0
+
+        for (
+            serie,
+            _,
+            _,
+        ) in self.series_map.values():
+
+            serie.clear()
+
+        for rotulo in list(
+            self.axis_x.categoriesLabels()
+        ):
+            self.axis_x.remove(
+                rotulo
+            )
+
+        self.axis_x.setRange(
+            0,
+            1,
         )

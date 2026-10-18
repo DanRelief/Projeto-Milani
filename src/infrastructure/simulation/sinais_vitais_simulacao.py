@@ -34,6 +34,8 @@ class SimuladorSinaisVitais:
             ParametroVital.PRESSAO_ARTERIAL_MEDIA: 85.0,
         }
 
+        self.baseline_inicial = dict(self.baseline)
+
         self.amplitude_spo2 = amplitude_spo2
         self.desvio_ruido_spo2 = desvio_ruido_spo2
         self.tendencia_spo2_por_minuto = tendencia_spo2_por_minuto
@@ -212,6 +214,91 @@ class SimuladorSinaisVitais:
 
         return measurements
 
+    def reduzir_spo2_teste(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+    
+            baseline_atual = self.baseline[
+                ParametroVital.SPO2
+            ]
+    
+            self.baseline[
+                ParametroVital.SPO2
+            ] = self._limit(
+                baseline_atual - quantidade,
+                0.0,
+                100.0,
+            )
+    
+    
+    def restaurar_spo2_teste(
+        self,
+    ) -> None:
+
+        self.baseline[
+            ParametroVital.SPO2
+        ] = 98.0
+
+
+    def simular_queda_spo2(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+
+        parametro = ParametroVital.SPO2
+
+        self.baseline[parametro] = (
+            self._limit(
+                self.baseline[parametro]
+                - quantidade,
+                0.0,
+                100.0,
+            )
+        )
+
+
+    def simular_queda_pam(
+        self,
+        quantidade: float = 15.0,
+    ) -> None:
+
+        parametro = (
+            ParametroVital
+            .PRESSAO_ARTERIAL_MEDIA
+        )
+
+        self.baseline[parametro] = (
+            self._limit(
+                self.baseline[parametro]
+                - quantidade,
+                20.0,
+                200.0,
+            )
+        )
+
+
+    def simular_aumento_temperatura(
+        self,
+        quantidade: float = 0.8,
+    ) -> None:
+
+        parametro = (
+            ParametroVital.TEMPERATURA
+        )
+
+        self.baseline[parametro] += (
+            quantidade
+        )
+
+
+    def restaurar_sinais_teste(
+        self,
+    ) -> None:
+
+        self.baseline = dict(
+            self.baseline_inicial
+        )
 class SinalVitalSimulacao(QObject):
 
     measurement_generated = Signal(object)
@@ -263,3 +350,56 @@ class SinalVitalSimulacao(QObject):
         self.valor_atual_time += timedelta(
             seconds=2
         )
+
+    
+    def simular_queda_spo2(
+    self,
+    quantidade: float = 3.0,
+) -> None:
+
+        self.simulator.reduzir_spo2_teste(
+            quantidade
+        )
+
+
+    def restaurar_spo2(
+        self,
+    ) -> None:
+
+        self.simulator.restaurar_spo2_teste()
+
+    def simular_queda_spo2(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+
+        self.simulator.simular_queda_spo2(
+            quantidade
+        )
+
+
+    def simular_queda_pam(
+        self,
+        quantidade: float = 15.0,
+    ) -> None:
+
+        self.simulator.simular_queda_pam(
+            quantidade
+        )
+
+
+    def simular_aumento_temperatura(
+        self,
+        quantidade: float = 0.8,
+    ) -> None:
+
+        self.simulator.simular_aumento_temperatura(
+            quantidade
+        )
+
+
+    def restaurar_sinais_teste(
+        self,
+    ) -> None:
+
+        self.simulator.restaurar_sinais_teste()

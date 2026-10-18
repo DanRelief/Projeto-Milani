@@ -1,19 +1,19 @@
 from datetime import datetime, timedelta
 
-from src.ia.baseline.rolling import (
-    calculate_rolling_baseline,
-)
-
-from src.ia.baseline.robust_zscore import (
-    calculate_robust_zscore,
-)
-
 from src.domain.measurement import (
     FonteDados,
     Medicao,
     ParametroVital,
 )
 
+from src.ia.baseline.rolling import (
+    BaselineStats,
+    calculate_rolling_baseline,
+)
+
+from src.ia.baseline.robust_zscore import (
+    calculate_robust_zscore,
+)
 
 def test_robust_zscore():
 
@@ -270,3 +270,93 @@ def test_robust_zscore_mad_zero():
     assert result.computable is False
 
     assert result.robust_zscore is None
+
+def criar_baseline_teste(
+    parametro: ParametroVital,
+    mediana: float,
+    mad: float,
+) -> BaselineStats:
+
+    inicio = datetime(
+        2026,
+        10,
+        18,
+        10,
+        0,
+        0,
+    )
+
+    fim = datetime(
+        2026,
+        10,
+        18,
+        10,
+        1,
+        0,
+    )
+
+    return BaselineStats(
+        parametro=parametro,
+        count=5,
+        mediana=mediana,
+        mad=mad,
+        start_data_hora=inicio,
+        end_data_hora=fim,
+    )
+
+def test_mad_zero_valor_igual_mediana_retorna_zero():
+
+    baseline = criar_baseline_teste(
+    parametro=ParametroVital.TEMPERATURA,
+    mediana=37.5,
+    mad=0.0,
+)
+
+    resultado = calculate_robust_zscore(
+        valor_atual_valor=37.5,
+        baseline=baseline,
+    )
+
+    assert resultado.computable is True
+    assert resultado.robust_zscore == 0.0
+
+def test_mad_zero_valor_diferente_nao_calcula():
+
+    baseline = criar_baseline_teste(
+    parametro=ParametroVital.TEMPERATURA,
+    mediana=37.5,
+    mad=0.0,
+)
+
+    resultado = calculate_robust_zscore(
+        valor_atual_valor=38.0,
+        baseline=baseline,
+    )
+
+    assert resultado.computable is False
+    assert resultado.robust_zscore is None
+
+import pytest
+
+
+def test_mad_maior_zero_calcula_z():
+
+    baseline = criar_baseline_teste(
+        parametro=ParametroVital.SPO2,
+        mediana=98.0,
+        mad=0.1,
+    )
+
+    resultado = calculate_robust_zscore(
+        valor_atual_valor=97.0,
+        baseline=baseline,
+    )
+
+    assert resultado.computable is True
+
+    assert resultado.robust_zscore is not None
+
+    assert resultado.robust_zscore == pytest.approx(
+        -6.7449,
+        rel=1e-3,
+    )

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from statistics import median
 from src.domain.measurement import Medicao, ParametroVital
 
@@ -6,14 +7,13 @@ from src.domain.measurement import Medicao, ParametroVital
 @dataclass
 class BaselineStats:
     parametro: ParametroVital
-
     count: int
 
     mediana: float
     mad: float
 
-    start_data_hora: object
-    end_data_hora: object
+    start_data_hora: datetime
+    end_data_hora: datetime
 
 
 def calculate_mad(values: list[float],mediana_value: float | None = None,) -> float:
