@@ -237,15 +237,16 @@ def salvar_historico_medicacao(
 
 
 def carregar_historico_animal(animal_id: int) -> list[dict]:
-    """Busca o histórico unificado de procedimentos e medicações do animal no banco."""
+    """Busca o histórico unificado trazendo o ID único de cada registro."""
     historico_unificado = []
     try:
         conexao = get_db_connection()
         cursor = conexao.cursor(dictionary=True)
 
-        # 1. Busca procedimentos
+        # 1. Busca procedimentos incluindo o ID da tabela
         query_proc = """
             SELECT 
+                hp.id AS id,
                 'Procedimento' AS tipo,
                 hp.procedimento AS procedimento,
                 u.nome AS medico_procedimento,
@@ -259,9 +260,10 @@ def carregar_historico_animal(animal_id: int) -> list[dict]:
         cursor.execute(query_proc, (animal_id,))
         procedimentos = cursor.fetchall()
 
-        # 2. Busca medicações
+        # 2. Busca medicações incluindo o ID da tabela
         query_med = """
             SELECT 
+                hm.id AS id,
                 'Medicação' AS tipo,
                 hm.medicamento AS medicacao,
                 hm.dose_quantidade AS quantidade,
@@ -277,7 +279,7 @@ def carregar_historico_animal(animal_id: int) -> list[dict]:
         cursor.execute(query_med, (animal_id,))
         medicacoes = cursor.fetchall()
 
-        # Unifica e ordena do mais recente para o mais antigo
+        # Unifica os registros e ordena do mais recente para o mais antigo
         historico_unificado = procedimentos + medicacoes
         historico_unificado.sort(
             key=lambda x: x.get("data_hora"), reverse=True
@@ -289,3 +291,34 @@ def carregar_historico_animal(animal_id: int) -> list[dict]:
         print(f"Erro ao carregar histórico do banco: {err}")
 
     return historico_unificado
+
+def deletar_historico_procedimento(procedimento_id: int) -> bool:
+    """Remove um registro da tabela historico_procedimentos pelo ID."""
+    try:
+        conexao = get_db_connection()
+        cursor = conexao.cursor()
+        query = "DELETE FROM historico_procedimentos WHERE id = %s;"
+        cursor.execute(query, (procedimento_id,))
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Exception as err:
+        print(f"Erro ao deletar procedimento: {err}")
+        return False
+
+
+def deletar_historico_medicacao(medicacao_id: int) -> bool:
+    """Remove um registro da tabela historico_medicacoes pelo ID."""
+    try:
+        conexao = get_db_connection()
+        cursor = conexao.cursor()
+        query = "DELETE FROM historico_medicacoes WHERE id = %s;"
+        cursor.execute(query, (medicacao_id,))
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Exception as err:
+        print(f"Erro ao deletar medicação: {err}")
+        return False

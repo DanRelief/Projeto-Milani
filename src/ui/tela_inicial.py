@@ -3,6 +3,15 @@ from uuid import uuid4
 
 from src.infrastructure.database import salvar_observacao_docente
 
+from PySide6.QtWidgets import QScrollArea
+
+from PySide6.QtWidgets import (
+    QFrame, QHBoxLayout, QLabel, QMessageBox, 
+    QPushButton, QScrollArea, QVBoxLayout, QWidget
+)
+
+from ..infrastructure.database import deletar_historico_procedimento, deletar_historico_medicacao, carregar_historico_animal
+
 from ..infrastructure.database import (
     carregar_historico_animal,
     salvar_historico_medicacao,
@@ -477,88 +486,111 @@ class TelaInicial(QMainWindow):
         return conteudo
 
     def exportar_relatorio_pdf(self) -> None:
-        if self.paciente.get("nome") == "---":
+        """Gera e exporta um relatório completo do paciente perfeitamente ajustado aos limites da página A4 em PDF."""
+        if not self.paciente.get("nome") or self.paciente.get("nome") == "---":
             QMessageBox.warning(
                 self, "Aviso", "Selecione um animal antes de exportar o relatório."
             )
             return
 
-        # 1. Abre a caixa de diálogo para o aluno escolher a pasta onde salvar
+        # 1. Caixa de diálogo para escolher onde salvar o arquivo
         nome_sugerido = f"Relatorio_MISA_{self.paciente['nome']}.pdf"
         caminho_arquivo, _ = QFileDialog.getSaveFileName(
             self, "Salvar Relatório em PDF", nome_sugerido, "Arquivos PDF (*.pdf)"
         )
 
         if not caminho_arquivo:
-            return  # Aluno cancelou a caixa de diálogo
+            return  # Cancelado pelo usuário
 
-        if not caminho_arquivo.endswith(".pdf"):
+        if not caminho_arquivo.lower().endswith(".pdf"):
             caminho_arquivo += ".pdf"
 
-        try:
-            # 2. Captura a imagem do gráfico atual
-            pixmap_grafico = self.grafico_view.grab()
-            # Salva temporariamente a imagem como PNG em memória base64 ou pasta temporária
-            caminho_img_temp = "temp_grafico_misa.png"
-            pixmap_grafico.save(caminho_img_temp, "PNG")
+        # Cores do tema conforme o perfil
+        e_docente = getattr(self, "is_teacher", False) or str(self.usuario.get("role", "")).lower() in ["teacher", "docente", "professor"]
+        cor_tema = "#287a55" if e_docente else "#08b9df"
+        cor_cabecalho_tabela = "#216746" if e_docente else "#078eaa"
 
-            # 3. Monta o histórico formatado em tabela HTML
+        caminho_img_temp = Path(__file__).resolve().parent / "temp_grafico_misa.png"
+
+        try:
+            # 2. Captura a imagem do gráfico atual da tela
+            pixmap_grafico = self.grafico_view.grab()
+            pixmap_grafico.save(str(caminho_img_temp), "PNG")
+
+            # 3. Capitalização e Formatação do Paciente
+            nome_paciente = str(self.paciente.get('nome', '---')).title()
+            especie_paciente = str(self.paciente.get('especie', '---')).capitalize()
+            porte_paciente = str(self.paciente.get('porte', '---')).capitalize()
+            responsavel_paciente = str(self.paciente.get('medico_procedimento', '---')).title()
+            emitido_por_nome = str(self.usuario.get('name', 'Usuário')).title()
+            emitido_por_papel = str(self.usuario.get('role', 'Aluno')).capitalize()
+
+            # 4. Tabela de Histórico
             linhas_historico_html = ""
             if not self.historico:
-                linhas_historico_html = "<tr><td colspan='4'>Nenhum procedimento ou medicação cadastrada até o momento.</td></tr>"
+                linhas_historico_html = "<tr><td colspan='4' style='text-align:center; color:#333333; padding: 10px; font-size: 11pt;'><i>Nenhum procedimento ou medicação cadastrada até o momento.</i></td></tr>"
             else:
                 for reg in self.historico:
                     data_hora = f"{reg.get('data', '')} {reg.get('hora', '')}".strip()
                     if reg.get("tipo") == "Procedimento":
-                        detalhe = f"Procedimento: {reg.get('procedimento', '-')}"
-                        resp = reg.get("medico_procedimento", "-")
+                        procedimento_fmt = str(reg.get('procedimento', '-')).capitalize()
+                        resp_fmt = str(reg.get("medico_procedimento", "-")).title()
+                        detalhe = f"<b>Procedimento:</b> {procedimento_fmt}"
+                        resp = resp_fmt
                     else:
-                        detalhe = f"Medicação: {reg.get('medicacao', '-')} (Qtd: {reg.get('quantidade', '')} {reg.get('unidade', '')})"
-                        resp = reg.get("medico_medicacao", "-")
+                        medicacao_fmt = str(reg.get('medicacao', '-')).capitalize()
+                        resp_fmt = str(reg.get("medico_medicacao", "-")).title()
+                        qtd = reg.get('quantidade', '')
+                        unid = reg.get('unidade', '')
+                        dose = f"({qtd} {unid})".strip() if qtd or unid else ""
+                        detalhe = f"<b>Medicação:</b> {medicacao_fmt} {dose}"
+                        resp = resp_fmt
 
                     linhas_historico_html += f"""
                         <tr>
-                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{data_hora}</td>
-                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'><b>{reg.get('tipo', 'Registro')}</b></td>
-                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{detalhe}</td>
-                            <td style='padding: 6px; border-bottom: 1px solid #ddd;'>{resp}</td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{data_hora}</td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'><b>{reg.get('tipo', 'Registro')}</b></td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{detalhe}</td>
+                            <td style='padding: 8px; border-bottom: 1px solid #d0d0d0; color: #1a1a1a; font-size: 10pt;'>{resp}</td>
                         </tr>
                     """
 
-            # 4. Estrutura o HTML Completo do Relatório
             observacao = self.paciente.get("observacao_docente") or "Nenhuma observação registrada."
-            
+
+            # 5. Estrutura o HTML com margens seguras e gráfico com largura restrita para A4
             conteudo_html = f"""
             <html>
             <head>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #1a1a1a; }}
-                    h1 {{ color: #08b9df; border-bottom: 2px solid #08b9df; padding-bottom: 5px; }}
-                    h2 {{ color: #1f4d3a; margin-top: 20px; font-size: 16px; }}
-                    .info-box {{ background-color: #f7f9fc; border: 1px solid #c7d0d9; padding: 12px; border-radius: 5px; margin-bottom: 15px; }}
-                    table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }}
-                    th {{ background-color: #287a55; color: white; padding: 8px; text-align: left; }}
+                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #000000; background-color: #ffffff; font-size: 11pt; }}
+                    h1 {{ color: {cor_tema}; border-bottom: 2px solid {cor_tema}; padding-bottom: 6px; font-size: 20pt; font-weight: bold; margin-bottom: 15px; }}
+                    h2 {{ color: {cor_tema}; margin-top: 18px; font-size: 14pt; border-bottom: 1px solid #cccccc; padding-bottom: 4px; font-weight: bold; }}
+                    .info-box {{ background-color: #f2f4f7; border: 1px solid #b0bec5; padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 11pt; line-height: 1.5; color: #000000; }}
+                    .info-box b {{ color: {cor_tema}; font-weight: bold; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 10px; background-color: #ffffff; table-layout: fixed; }}
+                    th {{ background-color: {cor_cabecalho_tabela}; color: #ffffff; padding: 8px; text-align: left; font-size: 11pt; font-weight: bold; }}
+                    td {{ color: #1a1a1a; font-size: 10pt; word-wrap: break-word; }}
                 </style>
             </head>
             <body>
                 <h1>M.I.S.A. - Relatório de Monitoramento Animal</h1>
                 
                 <div class="info-box">
-                    <b>Paciente:</b> {self.paciente['nome']} &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <b>Espécie:</b> {self.paciente['especie']} &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <b>Idade:</b> {self.paciente['idade']} anos &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <b>Porte:</b> {self.paciente['porte']}<br>
-                    <b>Responsável:</b> {self.paciente['medico_procedimento']}<br>
-                    <b>Emitido por:</b> {self.usuario.get('name', 'Aluno')} ({self.usuario.get('role', 'Aluno')})
+                    <b>Paciente:</b> {nome_paciente} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Espécie:</b> {especie_paciente} &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Idade:</b> {self.paciente.get('idade', 0)} anos &nbsp;&nbsp;|&nbsp;&nbsp; 
+                    <b>Porte:</b> {porte_paciente}<br><br>
+                    <b>Responsável Técnico:</b> {responsavel_paciente}<br>
+                    <b>Emitido por:</b> {emitido_por_nome} ({emitido_por_papel})
                 </div>
 
                 <h2>1. Gráfico de Sinais Vitais em Tempo Real</h2>
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="{caminho_img_temp}" width="600" />
+                <div style="text-align: center; margin: 10px 0;">
+                    <img src="{caminho_img_temp.as_uri()}" style="width: 100%; max-width: 520px; height: auto; display: block; margin: 0 auto;" />
                 </div>
 
                 <h2>2. Observações do Docente</h2>
-                <div class="info-box">
+                <div class="info-box" style="color: #1a1a1a; font-size: 11pt;">
                     <i>{observacao}</i>
                 </div>
 
@@ -566,10 +598,10 @@ class TelaInicial(QMainWindow):
                 <table>
                     <thead>
                         <tr>
-                            <th>Data / Hora</th>
-                            <th>Tipo</th>
-                            <th>Descrição / Detalhes</th>
-                            <th>Responsável</th>
+                            <th width="22%">Data / Hora</th>
+                            <th width="15%">Tipo</th>
+                            <th width="43%">Descrição / Detalhes</th>
+                            <th width="20%">Responsável</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -580,7 +612,7 @@ class TelaInicial(QMainWindow):
             </html>
             """
 
-            # 5. Renderiza e Imprime o Documento no Arquivo PDF
+            # 6. Renderiza no documento PDF
             documento = QTextDocument()
             documento.setHtml(conteudo_html)
 
@@ -598,8 +630,14 @@ class TelaInicial(QMainWindow):
 
         except Exception as err:
             QMessageBox.critical(
-                self, "Erro na Geracao", f"Não foi possível gerar o PDF: {err}"
+                self, "Erro na Geração", f"Não foi possível gerar o PDF: {err}"
             )
+        finally:
+            if caminho_img_temp.exists():
+                try:
+                    caminho_img_temp.unlink()
+                except Exception:
+                    pass
 
     def criar_card_paciente(self) -> QFrame:
         card = self.criar_card()
@@ -976,27 +1014,73 @@ class TelaInicial(QMainWindow):
         card = self.criar_card()
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(6)
 
-        self.historico_label = QLabel()
-        self.historico_label.setTextFormat(Qt.TextFormat.RichText)
-        self.historico_label.setWordWrap(True)
-        self.atualizar_card_historico()
+        # 1. Widget container para os itens do histórico (fundo branco explícito)
+        self.historico_container = QWidget()
+        self.historico_container.setStyleSheet("background-color: #ffffff;")
+        self.historico_layout = QVBoxLayout(self.historico_container)
+        self.historico_layout.setContentsMargins(0, 0, 0, 0)
+        self.historico_layout.setSpacing(6)
 
-        layout.addWidget(self.historico_label)
+        # 2. QScrollArea que isola os logs e o scroll vertical
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setStyleSheet("""
+            QScrollArea, QScrollArea > QWidget > QWidget {
+                background-color: #ffffff;
+                border: none;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+        """)
 
-        linha_botoes = QHBoxLayout()
+        scroll_area.setWidget(self.historico_container)
+        # O stretch=1 garante que o scroll ocupe o centro do card sem empurrar o rodapé
+        layout.addWidget(scroll_area, 1)
 
-        self.btn_exportar_pdf = QPushButton("📄 Baixar PDF (Gráfico + Histórico)")
-        self.btn_exportar_pdf.setObjectName("btn_card_animal")
-        self.btn_exportar_pdf.clicked.connect(self.exportar_relatorio_pdf)
-        linha_botoes.addWidget(self.btn_exportar_pdf)
+        # -------------------------------------------------------------
+        # 3. RODAPÉ FIXO DO CARD (FORA DO SCROLL)
+        # -------------------------------------------------------------
+        rodape_layout = QHBoxLayout()
+        rodape_layout.setContentsMargins(0, 4, 0, 0)
 
+        # Botão para baixar relatório / PDF (alinhado à esquerda no rodapé)
+        self.btn_pdf_historico = QPushButton("📄 Baixar PDF")
+        self.btn_pdf_historico.setObjectName("btn_card_animal")
+        self.btn_pdf_historico.setToolTip("Exportar relatório do histórico em PDF")
+        rodape_layout.addWidget(self.btn_pdf_historico, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        rodape_layout.addStretch()
+
+        self.btn_pdf_historico.clicked.connect(self.exportar_relatorio_pdf)
+        
+        rodape_layout.addWidget(self.btn_pdf_historico, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Botão "Ver Mais" (alinhado à direita no rodapé)
         ver_mais = QPushButton("Ver Mais")
         ver_mais.setObjectName("botao_ver_mais")
         ver_mais.clicked.connect(self.ver_historico_completo)
-        linha_botoes.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
+        rodape_layout.addWidget(ver_mais, alignment=Qt.AlignmentFlag.AlignRight)
 
-        layout.addLayout(linha_botoes)
+        # Adiciona a linha de botões fixos no final do layout principal do card
+        layout.addLayout(rodape_layout)
+
+        # Preenche os dados iniciais do histórico
+        self.atualizar_card_historico()
+
         return card
 
     def editar_paciente(self) -> None:
@@ -1084,28 +1168,115 @@ class TelaInicial(QMainWindow):
     def ver_historico_completo(self) -> None:
         dialogo = HistoricoDialog(self.historico, self)
         dialogo.exec()
-        
+
     def atualizar_card_historico(self) -> None:
+        """Limpa o container e reconstrói os registros sem afetar o rodapé fixo."""
+        while self.historico_layout.count() > 0:
+            item = self.historico_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
         if not self.historico:
-            self.historico_label.setText("Nenhum procedimento ou medicação cadastrada.")
+            lbl_vazio = QLabel("<i>Nenhum procedimento ou medicação cadastrada.</i>")
+            lbl_vazio.setStyleSheet("color: #666666; font-size: 13px; background-color: #ffffff;")
+            self.historico_layout.addWidget(lbl_vazio)
             return
 
-        textos = []
-        for registro in self.historico[:2]:
+        cor_destaque = "#287a55" if getattr(self, "is_teacher", False) else "#08b9df"
+
+        # Exibe os lançamentos dentro da caixa de rolagem
+        for registro in self.historico[:10]:
+            item_widget = QWidget()
+            item_widget.setStyleSheet("background-color: #ffffff;")
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(0, 2, 4, 6)
+            item_layout.setSpacing(6)
+
             if registro.get("tipo") == "Procedimento":
-                textos.append(
-                    f"Procedimento: {registro['procedimento']}<br>"
-                    f"Médico responsável: {registro['medico_procedimento']}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                texto_html = (
+                    f"<span style='color:{cor_destaque};'><b>Procedimento:</b></span> {registro['procedimento']}<br>"
+                    f"<span style='color:{cor_destaque};'><b>Responsável:</b></span> {registro.get('medico_procedimento', '---')}<br>"
+                    f"<small style='color:#666666;'>Data: {registro.get('data', '')} | Hora: {registro.get('hora', '')}</small>"
                 )
             else:
-                textos.append(
-                    f"Responsável: {registro.get('medico_medicacao', '')}<br>"
-                    f"Medicação: {registro.get('medicacao', '')} Qtd: {registro.get('quantidade', '')} {registro.get('unidade', '')}<br>"
-                    f"Data: {registro.get('data', '')} Hora: {registro.get('hora', '')}<br><br>"
+                texto_html = (
+                    f"<span style='color:{cor_destaque};'><b>Medicação:</b></span> {registro.get('medicacao', '---')} "
+                    f"({registro.get('quantidade', '')})<br>"
+                    f"<span style='color:{cor_destaque};'><b>Responsável:</b></span> {registro.get('medico_medicacao', '---')}<br>"
+                    f"<small style='color:#666666;'>Data: {registro.get('data', '')} | Hora: {registro.get('hora', '')}</small>"
                 )
 
-        self.historico_label.setText("".join(textos))
+            lbl_info = QLabel(texto_html)
+            lbl_info.setTextFormat(Qt.TextFormat.RichText)
+            lbl_info.setWordWrap(True)
+            lbl_info.setStyleSheet("color: #1a1a1a; font-size: 13px; background-color: transparent;")
+            item_layout.addWidget(lbl_info, 1)
+
+            # Botão "X" exclusivo para o perfil de Docente
+            if getattr(self, "is_teacher", False):
+                btn_excluir = QPushButton("✕")
+                btn_excluir.setToolTip("Excluir este registro do histórico")
+                btn_excluir.setFixedSize(22, 22)
+                btn_excluir.setStyleSheet("""
+                    QPushButton {
+                        color: #d9534f;
+                        background-color: transparent;
+                        border: none;
+                        font-weight: bold;
+                        font-size: 14px;
+                        border-radius: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #fde8e8;
+                        color: #c9302c;
+                    }
+                """)
+                btn_excluir.clicked.connect(lambda _, reg=registro: self._excluir_item_historico(reg))
+                item_layout.addWidget(btn_excluir, alignment=Qt.AlignmentFlag.AlignTop)
+
+            self.historico_layout.addWidget(item_widget)
+
+            linha = QFrame()
+            linha.setFrameShape(QFrame.Shape.HLine)
+            linha.setStyleSheet("color: #e0e0e0; background-color: #e0e0e0; max-height: 1px;")
+            self.historico_layout.addWidget(linha)
+
+    def _excluir_item_historico(self, registro: dict) -> None:
+        """Confirma e deleta um registro do histórico permanente no MySQL."""
+        tipo = registro.get("tipo", "Registro")
+        confirmacao = QMessageBox.question(
+            self,
+            "Confirmar Exclusão",
+            f"Deseja realmente excluir este lançamento de {tipo}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if confirmacao == QMessageBox.StandardButton.Yes:
+            reg_id = registro.get("id")
+            sucesso = False
+
+            # 1. Executa a deleção no banco de dados
+            if tipo == "Procedimento":
+                sucesso = deletar_historico_procedimento(reg_id)
+            else:
+                sucesso = deletar_historico_medicacao(reg_id)
+
+            if sucesso:
+                # 2. Garante a atualização da lista interna diretamente do banco de dados
+                animal_id = self.paciente.get("id")
+                if animal_id:
+                    self.historico = carregar_historico_animal(animal_id)
+                else:
+                    # Fallback em memória caso o ID não esteja disponível
+                    self.historico = [item for item in self.historico if item.get("id") != reg_id]
+
+                # 3. Força a reconstrução visual do card
+                self.atualizar_card_historico()
+            else:
+                QMessageBox.critical(self, "Erro", f"Não foi possível excluir o lançamento de {tipo}.")
 
     def _aplicar_estilos(self) -> None:
         # Define a cor do tema com base no perfil do usuário:
