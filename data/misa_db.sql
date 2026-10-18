@@ -146,3 +146,80 @@ CREATE TABLE IF NOT EXISTS eventos_alerta (
         data_hora
     )
 );
+
+-- 6. Procedimentos realizados durante uma sessão
+CREATE TABLE IF NOT EXISTS procedimentos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    sessao_id VARCHAR(36) NOT NULL,
+
+    nome VARCHAR(255) NOT NULL,
+
+    executado_por VARCHAR(150) DEFAULT NULL,
+
+    registrado_por INT NOT NULL,
+
+    data_hora DATETIME(6) NOT NULL,
+
+    observacao TEXT DEFAULT NULL,
+
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_procedimento_sessao
+        FOREIGN KEY (sessao_id)
+        REFERENCES sessoes_monitoramento(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_procedimento_usuario
+        FOREIGN KEY (registrado_por)
+        REFERENCES usuarios(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    INDEX idx_procedimento_sessao_data (
+        sessao_id,
+        data_hora
+    )
+);
+
+
+-- 7. Medicações administradas durante uma sessão
+CREATE TABLE IF NOT EXISTS medicacoes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    sessao_id VARCHAR(36) NOT NULL,
+
+    nome VARCHAR(150) NOT NULL,
+
+    quantidade DOUBLE DEFAULT NULL,
+
+    unidade VARCHAR(30) DEFAULT NULL,
+
+    administrado_por VARCHAR(150) DEFAULT NULL,
+
+    registrado_por INT NOT NULL,
+
+    data_hora DATETIME(6) NOT NULL,
+
+    observacao TEXT DEFAULT NULL,
+
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_medicacao_sessao
+        FOREIGN KEY (sessao_id)
+        REFERENCES sessoes_monitoramento(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_medicacao_usuario
+        FOREIGN KEY (registrado_por)
+        REFERENCES usuarios(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    INDEX idx_medicacao_sessao_data (
+        sessao_id,
+        data_hora
+    )
+);

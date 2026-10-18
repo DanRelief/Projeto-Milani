@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
 
+from infrastructure.repositories.repositorio_sessoes import RepositorioSessoes
+
 from ..infrastructure.simulation.sinais_vitais_simulacao import SinalVitalSimulacao
 from .dialogs.editar_paciente_dialog import EditarPacienteDialog
 from .dialogs.procedimento_dialog import CadastrarProcedimentoDialog
@@ -47,6 +49,8 @@ class TelaInicial(QMainWindow):
         self.resize(1024, 720)
         self.setMinimumSize(900, 650)
         self.indice_grafico = 0
+        self.id_sessao_atual = None
+        self.repositorio_sessoes = RepositorioSessoes()
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -356,6 +360,20 @@ class TelaInicial(QMainWindow):
     def closeEvent(self, evento) -> None:
         if self.simulator is not None:
             self.simulator.stop()
+
+        if self.id_sessao_atual is not None:
+
+            try:
+                self.repositorio_sessoes.encerrar_sessao(self.id_sessao_atual)
+
+            except Exception as erro:
+                print(
+                    "[M.I.S.A] Erro ao encerrar "
+                    f"sessão: {erro}"
+                )
+
+            self.id_sessao_atual = None
+
         super().closeEvent(evento)
 
     def montar_conteudo(self) -> QWidget:
@@ -710,27 +728,62 @@ class TelaInicial(QMainWindow):
         self.atualizar_informacoes_paciente()
 
         # Para o simulador do paciente anterior.
+        # Para o monitoramento anterior.
         if self.simulator is not None:
             self.simulator.stop()
 
-        # Limpa o gráfico ANTES da nova sessão.
+        # Encerra a sessão anterior no banco.
+        if self.id_sessao_atual is not None:
+
+            self.repositorio_sessoes.encerrar_sessao(
+                self.id_sessao_atual
+            )
+
+            self.id_sessao_atual = None
+
+
+        # Limpa a interface da sessão anterior.
         self.limpar_grafico_monitoramento()
 
-        id_paciente = str(
+
+        # Dados da nova sessão.
+        id_paciente = int(
             animal["id"]
         )
 
-        id_sessao = str(
-            uuid4()
+        usuario_id = int(
+            self.usuario["id"]
         )
 
+
+        # O banco gera o UUID da nova sessão.
+        id_sessao = (
+            self.repositorio_sessoes
+            .iniciar_sessao(
+                animal_id=id_paciente,
+                usuario_id=usuario_id,
+            )
+        )
+
+        self.id_sessao_atual = (
+            id_sessao
+        )
+
+
+        # Mesmo ID para controlador.
         self.controlador_monitoramento.iniciar_sessao(
-            id_paciente=id_paciente,
+            id_paciente=str(
+                id_paciente
+            ),
             id_sessao=id_sessao,
         )
 
+
+        # E mesmo ID para simulador.
         self.simulator = SinalVitalSimulacao(
-            id_paciente=id_paciente,
+            id_paciente=str(
+                id_paciente
+            ),
             id_sessao=id_sessao,
             parent=self,
         )

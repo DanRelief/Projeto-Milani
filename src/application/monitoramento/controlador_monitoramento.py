@@ -1,5 +1,9 @@
 from PySide6.QtCore import QObject, Signal
 
+from src.infrastructure.repositories.repositorio_alertas import (
+    RepositorioAlertas,
+)
+
 from ...domain.measurement import (
     Medicao,
     ParametroVital,
@@ -43,11 +47,14 @@ class ControladorMonitoramento(QObject):
     analise_parametro_atualizada = Signal(object)
     resumo_monitoramento_atualizado = Signal(object)
 
-    def __init__(
-        self,
-        parent=None,
-    ):
+    def __init__(self,parent=None,repositorio_alertas=None):
         super().__init__(parent)
+
+        self.repositorio_alertas = (
+            repositorio_alertas
+            if repositorio_alertas is not None
+            else RepositorioAlertas()
+        )
 
         self.id_paciente = None
         self.id_sessao = None
@@ -65,7 +72,6 @@ class ControladorMonitoramento(QObject):
         )
 
         self.analises_atuais = {}
-
     # -------------------------------------------------
     # CONFIGURAÇÕES
     # -------------------------------------------------
@@ -443,9 +449,9 @@ class ControladorMonitoramento(QObject):
 
         if evento is not None:
 
-            self.evento_alerta_gerado.emit(
-                evento
-            )
+            self._persistir_evento_alerta(evento)
+
+            self.evento_alerta_gerado.emit(evento)
 
     # -------------------------------------------------
     # RESUMO DOS TRÊS PARÂMETROS
@@ -539,3 +545,15 @@ class ControladorMonitoramento(QObject):
             parametro,
             parametro.value,
         )
+    def _persistir_evento_alerta(self,evento) -> None:
+
+        try:
+            self.repositorio_alertas.salvar(
+                evento
+            )
+
+        except Exception as erro:
+            print(
+                "[M.I.S.A] Falha ao persistir "
+                f"evento de alerta: {erro}"
+            )
