@@ -752,65 +752,95 @@ class TelaInicial(QMainWindow):
         layout.setContentsMargins(10, 10, 10, 10)
 
         self.grafico = QChart()
-        self.grafico.setTitle("Monitoramento em Tempo Real (IA Teste)")
-        self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+        self.grafico.setTitle("Sinais Vitais e Agentes Inalatórios")
+        self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation) # Animação desativada para plotagem contínua fluida
 
         self.grafico_view = QChartView(self.grafico)
         self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
         self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         layout.addWidget(self.grafico_view, 1)
 
-        # 3 Séries para Teste
-        self.oxigenio_serie = QSplineSeries()
-        self.oxigenio_serie.setName("Oxigênio (%)")
+        # Mapeamento e estilo das 8 séries de dados (Cor distinta para cada parâmetro)
+        self.series_map = {
+            "freq_cardiaca": (QSplineSeries(), "FC (bpm)", QColor("#E74C3C")),         # Vermelho
+            "pressao_arterial": (QSplineSeries(), "PA (mmHg)", QColor("#E67E22")),     # Laranja
+            "spo2": (QSplineSeries(), "SpO2 (%)", QColor("#2ECC71")),                  # Verde
+            "etco2": (QSplineSeries(), "ETCO2 (mmHg)", QColor("#F1C40F")),             # Amarelo
+            "freq_respiratoria": (QSplineSeries(), "FR (rpm)", QColor("#3498DB")),     # Azul Claro
+            "temperatura": (QSplineSeries(), "Temp (°C)", QColor("#9B59B6")),          # Roxo
+            "fluxo_o2_ar": (QSplineSeries(), "O2/Ar (L/min)", QColor("#1ABC9C")),      # Turquesa
+            "iso_sevo": (QSplineSeries(), "Iso/Sevo (%)", QColor("#34495E"))           # Cinza Escuro
+        }
 
-        self.pressao_serie = QSplineSeries()
-        self.pressao_serie.setName("Pressão Arterial (mmHg)")
+        for key, (series, label, color) in self.series_map.items():
+            series.setName(label)
+            pen = QPen(color)
+            pen.setWidth(2)
+            series.setPen(pen)
+            self.grafico.addSeries(series)
 
-        self.temperatura_serie = QSplineSeries()
-        self.temperatura_serie.setName("Temperatura (°C)")
-
-        self.grafico.addSeries(self.oxigenio_serie)
-        self.grafico.addSeries(self.pressao_serie)
-        self.grafico.addSeries(self.temperatura_serie)
-
-        self.axis_x = QValueAxis()
-        self.axis_x.setTitleText("Amostras / Tempo")
-        self.axis_x.setLabelFormat("%d")
-        self.axis_x.setRange(0, 30)
+        # Configuração dos Eixos
+        self.axis_x = QCategoryAxis()
+        self.axis_x.setTitleText("Horário Decorrido")
 
         self.axis_y = QValueAxis()
-        self.axis_y.setRange(0, 150)
+        self.axis_y.setRange(0, 180) # Amplitude abrangendo os principais sinais vitais
         self.axis_y.setTitleText("Valor")
 
         self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
         self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
 
-        for series in (self.oxigenio_serie, self.pressao_serie, self.temperatura_serie):
+        for series, _, _ in self.series_map.values():
             series.attachAxis(self.axis_x)
             series.attachAxis(self.axis_y)
 
         return card
 
     def update_chart(self, medicao) -> None:
-        index = self.oxigenio_serie.count()
+        if not medicao:
+            return
+        serie_referencia = self.series_map["spo2"][0]
+        index = serie_referencia.count()
+        horario = medicao[0].data_hora.strftime("%H:%M:%S")
 
-        # Adiciona os valores do objeto Measurement
-        self.oxigenio_serie.append(float(index), float(getattr(medicao, "oxigenio", 0.0)))
-        self.pressao_serie.append(float(index), float(getattr(medicao, "pressao_arterial", 0.0)))
-        self.temperatura_serie.append(float(index), float(getattr(medicao, "temperatura", 0.0)))
+        mapa_series = {
+        "spo2": "spo2",
+        "temperatura": "temperatura",
+        "pressao_arterial_media": "pressao_arterial",
+        }
 
-        JANELA_MAXIMA = 30
-        if index >= JANELA_MAXIMA:
-            self.axis_x.setRange(index - JANELA_MAXIMA + 1, index)
+        for medicoes in medicao:
+            chave = mapa_series.get(medicoes.parametro.value)
+
+            if chave is None:
+                continue
+
+            self.series_map[chave][0].append(
+                index,
+                float(medicoes.valor),
+            )
+
+        self.axis_x.append(horario, index + 1)
+
+        JANELA_VISIVEL = 30
+
+        if index >= JANELA_VISIVEL:
+            self.axis_x.setRange(
+                index - JANELA_VISIVEL + 1,
+                index + 1,
+            )
         else:
-            self.axis_x.setRange(0, JANELA_MAXIMA)
+            self.axis_x.setRange(
+                0,
+                max(1, index + 1),
+            )
 
-        BUFFER_MAXIMO = 150
-        if self.oxigenio_serie.count() > BUFFER_MAXIMO:
-            self.oxigenio_serie.remove(0)
-            self.pressao_serie.remove(0)
-            self.temperatura_serie.remove(0)
+        primeira_serie = self.series_map["spo2"][0]
+        
+        BUFFER_MAXIMO = 120
+        if primeira_serie.count() > BUFFER_MAXIMO:
+            for series, _, _ in self.series_map.values():
+                series.remove(0)
 
     def _abrir_cadastro_animal(self) -> None:
         dlg = DialogCadastrarAnimal(self.usuario, self)
