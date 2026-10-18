@@ -9,8 +9,9 @@ from PySide6.QtCore import (
     Qt,
     Signal,
     QThread,
+    QTimer,
 )
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -24,8 +25,9 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QGraphicsDropShadowEffect,
 )
-from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QSplineSeries, QValueAxis
+from PySide6.QtCharts import QCategoryAxis, QChart, QChartView, QLineSeries, QValueAxis
 
 from infrastructure.repositories.repositorio_sessoes import RepositorioSessoes
 
@@ -54,6 +56,7 @@ class TelaInicial(QMainWindow):
         self.resize(1024, 720)
         self.setMinimumSize(900, 650)
         self.indice_grafico = 0
+        self.parametro_grafico_selecionado = None
         self.id_sessao_atual = None
         self.repositorio_sessoes = RepositorioSessoes()
         self.repositorio_procedimentos = RepositorioProcedimentos()
@@ -62,6 +65,13 @@ class TelaInicial(QMainWindow):
         self.worker_relatorio = None
         self.relatorio_ia_atual = None
         self.analises_atuais = {}
+        self.estado_alerta_atual = "normal"
+        self.alerta_animacao_timer = QTimer(self)
+        self.alerta_animacao_timer.timeout.connect(
+            self._alternar_animacao_alerta
+        )
+        self.alerta_animacao_fase_forte = False
+        self.sombra_alerta = None
 
         # 1. Inicialmente sem animal selecionado (dados zerados)
         self.paciente = {
@@ -151,6 +161,12 @@ class TelaInicial(QMainWindow):
         # Conteúdo Principal
         conteudo_widget = self.montar_conteudo()
         layout_fundo.addWidget(conteudo_widget, 1)
+
+        self.sombra_alerta = QGraphicsDropShadowEffect(self.card_alerta_ia)
+        self.sombra_alerta.setBlurRadius(20)
+        self.sombra_alerta.setOffset(0, 0)
+        self.sombra_alerta.setColor(QColor(255, 0, 0, 0))
+        self.card_alerta_ia.setGraphicsEffect(self.sombra_alerta)
 
         self._aplicar_estilos()
         self.setCentralWidget(central)
@@ -402,8 +418,10 @@ class TelaInicial(QMainWindow):
 
         card_paciente.setFixedHeight(340)
         card_historico.setFixedHeight(280)
-        card_monitoramento.setFixedHeight(420)
-        card_alertas.setFixedHeight(180)
+
+        card_monitoramento.setMinimumHeight(380)
+        card_alertas.setMinimumHeight(220)
+        card_alertas.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding,)
 
         coluna_esquerda = QVBoxLayout()
         coluna_direita = QVBoxLayout()
@@ -579,21 +597,38 @@ class TelaInicial(QMainWindow):
         layout.setContentsMargins(10, 10, 10, 10)
         linha_valores = QHBoxLayout()
 
-        self.valor_spo2 = QLabel("SpO₂\n-- %")
-        self.valor_temperatura = QLabel("Temperatura\n-- °C")
-        self.valor_pam = QLabel("PAM\n-- mmHg")
+        self.valor_spo2 = QPushButton("SpO₂\n-- %")
+        self.valor_temperatura = QPushButton("Temperatura\n-- °C")
+        self.valor_pam = QPushButton("PAM\n-- mmHg")
+        for botao in (self.valor_spo2,self.valor_temperatura,self.valor_pam,):
+            botao.setCheckable(True)
 
-        for label in (self.valor_spo2,self.valor_temperatura,self.valor_pam,):
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            botao.setObjectName("card_sinal")
 
-            label.setStyleSheet(
+            botao.setMinimumHeight(65)
+
+            botao.setToolTip(
+                "Clique para visualizar "
+                "este sinal individualmente."
+            )
+
+        #conexaõ dos botão com o ato de clicar
+        self.valor_spo2.clicked.connect(lambda: self.selecionar_grafico_sinal("spo2"))
+
+        self.valor_temperatura.clicked.connect(lambda: self.selecionar_grafico_sinal("temperatura"))
+
+        self.valor_pam.clicked.connect(lambda: self.selecionar_grafico_sinal("pam"))
+
+        for botao in (self.valor_spo2, self.valor_temperatura, self.valor_pam):
+            botao.setStyleSheet(
                 """
-                QLabel {
+                QPushButton {
                     background-color: #f5f7f9;
                     border-radius: 8px;
                     padding: 8px;
                     font-size: 14px;
                     font-weight: bold;
+                    text-align: center;
                 }
                 """
             )
@@ -604,31 +639,41 @@ class TelaInicial(QMainWindow):
         layout.addLayout(linha_valores)
 
         self.grafico = QChart()
-        self.grafico.setTitle("Sinais Vitais e Agentes Inalatórios")
+        self.grafico.setTitle("Sinais Vitais — Visão Geral")
+        self.grafico.setTheme(QChart.ChartTheme.ChartThemeLight)
+        self.grafico.setBackgroundVisible(True)
+        self.grafico.setBackgroundBrush(QBrush(QColor("#ffffff")))
+        self.grafico.setPlotAreaBackgroundVisible(True)
+        self.grafico.setPlotAreaBackgroundBrush(QBrush(QColor("#ffffff")))
+        self.grafico.setTitleBrush(QBrush(QColor("#333333")))
+        self.grafico.legend().setVisible(True)
+        self.grafico.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
+        self.grafico.legend().setLabelColor(QColor("#333333"))
         self.grafico.setAnimationOptions(QChart.AnimationOption.NoAnimation) # Animação desativada para plotagem contínua fluida
 
         self.grafico_view = QChartView(self.grafico)
         self.grafico_view.setFrameShape(QFrame.Shape.NoFrame)
         self.grafico_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.grafico_view.setStyleSheet("background-color: #ffffff;")
         layout.addWidget(self.grafico_view, 1)
 
         # Mapeamento e estilo das 8 séries de dados (Cor distinta para cada parâmetro)
         self.series_map = {
-            "freq_cardiaca": (QSplineSeries(), "FC (bpm)", QColor("#E74C3C")),         # Vermelho
-            "pressao_arterial": (QSplineSeries(), "PA (mmHg)", QColor("#E67E22")),     # Laranja
-            "spo2": (QSplineSeries(), "SpO2 (%)", QColor("#2ECC71")),                  # Verde
-            "etco2": (QSplineSeries(), "ETCO2 (mmHg)", QColor("#F1C40F")),             # Amarelo
-            "freq_respiratoria": (QSplineSeries(), "FR (rpm)", QColor("#3498DB")),     # Azul Claro
-            "temperatura": (QSplineSeries(), "Temp (°C)", QColor("#9B59B6")),          # Roxo
-            "fluxo_o2_ar": (QSplineSeries(), "O2/Ar (L/min)", QColor("#1ABC9C")),      # Turquesa
-            "iso_sevo": (QSplineSeries(), "Iso/Sevo (%)", QColor("#34495E"))           # Cinza Escuro
+           "spo2": (QLineSeries(),"SpO₂ (%)",QColor("#27ae60"),),
+            "temperatura": (QLineSeries(),"Temperatura (°C)",QColor("#9b59b6"),),
+            "pam": (QLineSeries(),"PAM (mmHg)",QColor("#e67e22"),),
         }
 
         for key, (series, label, color) in self.series_map.items():
             series.setName(label)
             pen = QPen(color)
-            pen.setWidth(2)
+            pen.setWidthF(3.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             series.setPen(pen)
+            series.setBrush(QBrush(color))
+            series.setPointsVisible(True)
+            series.setMarkerSize(4.0)
             self.grafico.addSeries(series)
 
         # Configuração dos Eixos
@@ -638,6 +683,16 @@ class TelaInicial(QMainWindow):
         self.axis_y = QValueAxis()
         self.axis_y.setRange(0, 180) # Amplitude abrangendo os principais sinais vitais
         self.axis_y.setTitleText("Valor")
+
+        cor_texto_eixos = QColor("#333333")
+        cor_grade = QColor("#d9d9d9")
+        caneta_grade = QPen(cor_grade)
+        self.axis_x.setLabelsBrush(QBrush(cor_texto_eixos))
+        self.axis_x.setTitleBrush(QBrush(cor_texto_eixos))
+        self.axis_x.setGridLinePen(caneta_grade)
+        self.axis_y.setLabelsBrush(QBrush(cor_texto_eixos))
+        self.axis_y.setTitleBrush(QBrush(cor_texto_eixos))
+        self.axis_y.setGridLinePen(caneta_grade)
 
         self.grafico.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
         self.grafico.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
@@ -659,7 +714,7 @@ class TelaInicial(QMainWindow):
         mapa_series = {
         "spo2": "spo2",
         "temperatura": "temperatura",
-        "pressao_arterial_media": "pressao_arterial",
+        "pressao_arterial_media": "pam",
         }
 
         for medicoes in medicao:
@@ -693,13 +748,14 @@ class TelaInicial(QMainWindow):
                 index,
             )
 
-        primeira_serie = self.series_map["spo2"][0]
-        
-        # Limpeza de buffer de memória para séries muito longas
         BUFFER_MAXIMO = 120
-        if primeira_serie.count() > BUFFER_MAXIMO:
-            for series, _, _ in self.series_map.values():
-                series.remove(0)
+
+        for (serie,_,_,) in self.series_map.values():
+
+            excesso = (serie.count() - BUFFER_MAXIMO)
+
+            if excesso > 0:
+                serie.removePoints(0,excesso,)
 
     def _abrir_cadastro_animal(self) -> None:
         dlg = DialogCadastrarAnimal(self.usuario, self)
@@ -871,17 +927,36 @@ class TelaInicial(QMainWindow):
         return secao
 
     def criar_card_alerta_ia(self) -> QFrame:
-        card = self.criar_card()
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 10, 14, 10)
-
+        self.card_alerta_ia = self.criar_card()
+        layout = QVBoxLayout(self.card_alerta_ia)
+        self.card_alerta_ia.setObjectName("card_alerta_ia")
+        layout.setContentsMargins(18,14,18,14,)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.alerta_ia_label = QLabel(
-            "Selecione ou cadastre um animal para visualizar as análises em tempo real e alertas da IA."
+            (
+                "<b>Selecione um animal para "
+                "iniciar o monitoramento.</b>"
+            )
         )
+
         self.alerta_ia_label.setTextFormat(Qt.TextFormat.RichText)
         self.alerta_ia_label.setWordWrap(True)
+        self.alerta_ia_label.setStyleSheet(
+            """
+            QLabel {
+                font-size: 14px;
+                color: #222222;
+            }
+            """
+        )
+        self.alerta_ia_label.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.MinimumExpanding,)
+        self.alerta_ia_label.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+
         layout.addWidget(self.alerta_ia_label)
-        return card
+
+        return self.card_alerta_ia
 
     def criar_card_historico(self) -> QFrame:
         card = self.criar_card()
@@ -1160,6 +1235,33 @@ class TelaInicial(QMainWindow):
                 font-size: 12px;
             }
             #btn_card_animal:hover { background-color: #216746; }
+
+            QPushButton#card_sinal {
+                background-color: #f7f9fb;
+                color: #242424;
+
+                border: 2px solid #e4e8ec;
+                border-radius: 12px;
+
+                padding: 8px;
+
+                font-size: 14px;
+                font-weight: bold;
+            }
+
+            QPushButton#card_sinal:hover {
+                background-color: #f0fbfd;
+
+                border: 2px solid #08b9df;
+            }
+
+            QPushButton#card_sinal:checked {
+                background-color: #eef0ff;
+
+                border: 2px solid #2100b8;
+
+                color: #2100b8;
+            }
             """
         )
 
@@ -1181,156 +1283,295 @@ class TelaInicial(QMainWindow):
         analises = resumo[
             "analises"
         ]
+
         self.analises_atuais = analises
+
+        # -----------------------------
+        # AQUECIMENTO
+        # -----------------------------
 
         if status == "aquecimento":
 
             quantidade_prontas = sum(
                 analise["status"]
                 != "aquecimento"
-                for analise
-                in analises.values()
+                for analise in (
+                    analises.values()
+                )
+            )
+
+            self._aplicar_estilo_alerta(
+                "indisponivel"
             )
 
             self.alerta_ia_label.setText(
-                "<b>Inicializando análises...</b><br>"
-                f"Parâmetros processados: "
-                f"{quantidade_prontas}/3"
+                (
+                    "<span style='font-size:16px;'>"
+                    "<b>◷ Inicializando monitoramento</b>"
+                    "</span>"
+                    "<br><br>"
+                    "O sistema está coletando dados "
+                    "suficientes para estabelecer o "
+                    "padrão recente do paciente."
+                    "<br><br>"
+                    f"Parâmetros preparados: "
+                    f"<b>{quantidade_prontas}/3</b>"
+                )
             )
 
             return
+
+        # -----------------------------
+        # ALERTA
+        # -----------------------------
 
         if status == "alerta":
 
             analises_alerta = [
                 analise
-                for analise
-                in analises.values()
+                for analise in (
+                    analises.values()
+                )
                 if analise["status"]
                 == "alerta"
             ]
 
-            textos = [
-                "<b>⚠ ALERTA DE ALTERAÇÃO</b>"
+            self._aplicar_estilo_alerta(
+                "alerta"
+            )
+
+            partes = [
+                (
+                    "<span style='font-size:24px;"
+                    "color:#d32f2f;'>"
+                    "<b>⚠ ALERTA ATIVO</b>"
+                    "</span>"
+                ),
+                (
+                    "<br>"
+                    "O sistema identificou uma "
+                    "<b>alteração persistente</b> "
+                    "em relação ao comportamento "
+                    "recente do paciente."
+                ),
             ]
 
-            for analise in analises_alerta:
+            for analise in (
+                analises_alerta
+            ):
+                partes.append(
+                    "<br><br>"
+                )
 
-                texto_z = self._formatar_z(
-                    analise.get(
-                        "z_robusto"
+                partes.append(
+                    self._montar_bloco_parametro(
+                        analise
                     )
                 )
 
-                textos.append(
-                    f"<b>{analise['nome']}:</b> "
-                    f"{analise['valor']:.2f} "
-                    f"{analise['unidade']} "
-                    f"| Z = {texto_z}"
+            partes.append(
+                (
+                    "<br><br>"
+                    "<span style='color:#555555;'>"
+                    "Recomenda-se atenção ao sinal "
+                    "indicado e correlação com o "
+                    "contexto clínico do paciente."
+                    "</span>"
                 )
+            )
 
             self.alerta_ia_label.setText(
-                "<br>".join(
-                    textos
+                "".join(
+                    partes
                 )
             )
 
             return
+
+        # -----------------------------
+        # OBSERVAÇÃO
+        # -----------------------------
 
         if status == "observacao":
 
             observacoes = [
                 analise
-                for analise
-                in analises.values()
+                for analise in (
+                    analises.values()
+                )
                 if analise["status"]
                 == "observacao"
             ]
 
-            textos = [
-                "<b>◷ Alteração em observação</b>"
+            self._aplicar_estilo_alerta(
+                "observacao"
+            )
+
+            partes = [
+                (
+                    "<span style='font-size:17px;"
+                    "color:#9a7d0a;'>"
+                    "<b>◷ ALTERAÇÃO EM OBSERVAÇÃO</b>"
+                    "</span>"
+                ),
+                (
+                    "<br><br>"
+                    "Foi identificada uma mudança "
+                    "em relação ao padrão recente, "
+                    "mas o sistema ainda está "
+                    "verificando se ela persiste."
+                ),
             ]
 
             for analise in observacoes:
 
-                texto_z = self._formatar_z(
-                    analise.get(
-                        "z_robusto"
+                partes.append(
+                    "<br><br>"
+                )
+
+                partes.append(
+                    self._montar_bloco_parametro(
+                        analise
                     )
                 )
 
-                textos.append(
-                    f"{analise['nome']}: "
-                    f"{analise['valor']:.2f} "
-                    f"{analise['unidade']} "
-                    f"| Z = {texto_z}"
+            partes.append(
+                (
+                    "<br><br>"
+                    "<span style='color:#666666;'>"
+                    "Status: em acompanhamento."
+                    "</span>"
                 )
-
-            textos.append(
-                "Aguardando persistência "
-                "da alteração."
             )
 
             self.alerta_ia_label.setText(
-                "<br>".join(
-                    textos
+                "".join(
+                    partes
                 )
             )
 
             return
+
+        # -----------------------------
+        # RECUPERAÇÃO
+        # -----------------------------
 
         if status == "recuperacao":
 
             recuperacoes = [
                 analise
-                for analise
-                in analises.values()
+                for analise in (
+                    analises.values()
+                )
                 if analise["status"]
                 == "recuperacao"
             ]
 
-            textos = [
-                "<b>↗ Sinal em recuperação</b>"
+            self._aplicar_estilo_alerta(
+                "recuperacao"
+            )
+
+            partes = [
+                (
+                    "<span style='font-size:17px;"
+                    "color:#2471a3;'>"
+                    "<b>↗ SINAL EM RECUPERAÇÃO</b>"
+                    "</span>"
+                ),
+                (
+                    "<br><br>"
+                    "O parâmetro está retornando "
+                    "em direção ao comportamento "
+                    "recente do paciente."
+                ),
             ]
 
             for analise in recuperacoes:
 
-                texto_z = self._formatar_z(
-                    analise.get(
-                        "z_robusto"
+                partes.append(
+                    "<br><br>"
+                )
+
+                partes.append(
+                    self._montar_bloco_parametro(
+                        analise,
+                        mostrar_detalhe_tecnico=False,
                     )
                 )
 
-                textos.append(
-                    f"{analise['nome']}: "
-                    f"{analise['valor']:.2f} "
-                    f"{analise['unidade']} "
-                    f"| Z = {texto_z}"
+            partes.append(
+                (
+                    "<br><br>"
+                    "<span style='color:#666666;'>"
+                    "O sistema continuará acompanhando "
+                    "as próximas medições."
+                    "</span>"
                 )
+            )
 
             self.alerta_ia_label.setText(
-                "<br>".join(
-                    textos
+                "".join(
+                    partes
                 )
             )
 
             return
+
+        # -----------------------------
+        # INDISPONÍVEL
+        # -----------------------------
 
         if status == "indisponivel":
 
+            self._aplicar_estilo_alerta(
+                "indisponivel"
+            )
+
             self.alerta_ia_label.setText(
-                "<b>⚠ Análise temporariamente "
-                "indisponível.</b><br>"
-                "Verificando qualidade ou "
-                "variabilidade dos sinais."
+                (
+                    "<span style='font-size:17px;'>"
+                    "<b>⚠ Análise temporariamente "
+                    "indisponível</b>"
+                    "</span>"
+                    "<br><br>"
+                    "O sistema não possui dados "
+                    "suficientes ou confiáveis para "
+                    "avaliar o sinal neste momento."
+                    "<br><br>"
+                    "<span style='color:#666666;'>"
+                    "O monitoramento continuará "
+                    "automaticamente."
+                    "</span>"
+                )
             )
 
             return
 
+        # -----------------------------
         # NORMAL
+        # -----------------------------
 
-        textos = [
-            "<b>✓ Monitoramento normal</b>"
+        self._aplicar_estilo_alerta(
+            "normal"
+        )
+
+        partes = [
+            (
+                "<span style='font-size:17px;"
+                "color:#1e8449;'>"
+                "<b>✓ MONITORAMENTO ESTÁVEL</b>"
+                "</span>"
+            ),
+            (
+                "<br><br>"
+                "Nenhuma alteração persistente foi "
+                "identificada pelos critérios de "
+                "monitoramento do sistema."
+            ),
+            (
+                "<br><br>"
+                "<b>Sinais atuais</b>"
+            ),
         ]
 
         ordem = [
@@ -1354,22 +1595,27 @@ class TelaInicial(QMainWindow):
             ):
                 continue
 
-            texto_z = self._formatar_z(
-                analise.get(
-                    "z_robusto"
+            partes.append(
+                (
+                    "<br>"
+                    f"{analise['nome']}: "
+                    f"<b>{analise['valor']:.2f} "
+                    f"{analise['unidade']}</b>"
                 )
             )
 
-            textos.append(
-                f"{analise['nome']}: "
-                f"{analise['valor']:.2f} "
-                f"{analise['unidade']} "
-                f"| Z = {texto_z}"
+        partes.append(
+            (
+                "<br><br>"
+                "<span style='color:#666666;'>"
+                "Status: acompanhamento contínuo."
+                "</span>"
             )
+        )
 
         self.alerta_ia_label.setText(
-            "<br>".join(
-                textos
+            "".join(
+                partes
             )
         )
 
@@ -1619,3 +1865,341 @@ class TelaInicial(QMainWindow):
 
         self.thread_relatorio = None
         self.worker_relatorio = None
+
+    def selecionar_grafico_sinal(self,parametro: str,) -> None:
+        # Se clicar novamente no parâmetro
+        # que já está selecionado,
+        # volta para visão geral.
+        if (self.parametro_grafico_selecionado == parametro):
+            self.parametro_grafico_selecionado = (None)
+
+        else:
+            self.parametro_grafico_selecionado = (parametro)
+
+        self._atualizar_modo_grafico()
+
+    def _atualizar_modo_grafico(self,) -> None:
+
+        parametro = (
+            self.parametro_grafico_selecionado
+        )
+
+        botoes = {
+            "spo2": self.valor_spo2,
+            "temperatura": (
+                self.valor_temperatura
+            ),
+            "pam": self.valor_pam,
+        }
+
+        for (
+            chave,
+            botao,
+        ) in botoes.items():
+
+            botao.setChecked(
+                chave == parametro
+            )
+
+        for (
+            chave,
+            (
+                serie,
+                _,
+                _,
+            ),
+        ) in self.series_map.items():
+
+            serie.setVisible(
+                parametro is None
+                or chave == parametro
+            )
+
+        self._configurar_escala_grafico(
+            parametro
+        )
+
+    def _configurar_escala_grafico(
+        self,
+        parametro: str | None,
+    ) -> None:
+
+        if parametro is None:
+
+            self.grafico.setTitle(
+                "Sinais Vitais — Visão Geral"
+            )
+
+            self.axis_y.setTitleText(
+                "Valor"
+            )
+
+            self.axis_y.setRange(
+                0,
+                160
+            )
+
+            self.axis_y.setLabelFormat(
+                "%.0f"
+            )
+
+            self.grafico.legend().setVisible(
+                True
+            )
+
+            return
+
+        configuracoes = {
+            "spo2": {
+                "titulo": "SpO₂ — Detalhamento",
+                "eixo": "Saturação (%)",
+                "minimo": 70,
+                "maximo": 100,
+                "formato": "%.0f",
+            },
+
+            "temperatura": {
+                "titulo": (
+                    "Temperatura — Detalhamento"
+                ),
+                "eixo": "Temperatura (°C)",
+                "minimo": 34,
+                "maximo": 42,
+                "formato": "%.1f",
+            },
+
+            "pam": {
+                "titulo": "PAM — Detalhamento",
+                "eixo": "PAM (mmHg)",
+                "minimo": 20,
+                "maximo": 160,
+                "formato": "%.0f",
+            },
+        }
+
+        configuracao = (
+            configuracoes[parametro]
+        )
+
+        self.grafico.setTitle(
+            configuracao["titulo"]
+        )
+
+        self.axis_y.setTitleText(
+            configuracao["eixo"]
+        )
+
+        self.axis_y.setRange(
+            configuracao["minimo"],
+            configuracao["maximo"],
+        )
+
+        self.axis_y.setLabelFormat(
+            configuracao["formato"]
+        )
+
+        self.grafico.legend().setVisible(
+            False
+        )
+    def _obter_referencia_recente(self,analise: dict,) -> float | None:
+
+        valor = analise.get("mediana")
+
+        if valor is None:
+            return None
+
+        return float(valor)
+
+    def _formatar_variacao_sinal(self,analise: dict,) -> str:
+
+        valor_atual = analise.get("valor")
+
+        referencia = (self._obter_referencia_recente(analise))
+
+        unidade = analise.get("unidade", "",)
+
+        if (valor_atual is None or referencia is None):
+            return (
+                "Comparação com o padrão recente "
+                "indisponível."
+            )
+
+        diferenca = (float(valor_atual) - float(referencia))
+
+        if abs(diferenca) < 0.01:
+            return (
+                "Valor atual muito próximo "
+                "da referência recente."
+            )
+
+        if diferenca < 0:
+            direcao = "redução"
+        else:
+            direcao = "aumento"
+
+        return (
+            f"{direcao.capitalize()} de "
+            f"{abs(diferenca):.2f} {unidade} "
+            f"em relação à referência recente."
+        )
+
+    def _montar_bloco_parametro(self,analise: dict,mostrar_detalhe_tecnico: bool = True,) -> str:
+
+        nome = analise.get("nome","Parâmetro",)
+
+        valor = analise.get("valor")
+
+        unidade = analise.get("unidade","",)
+
+        referencia = (self._obter_referencia_recente(analise))
+
+        z_robusto = analise.get("z_robusto")
+
+        if valor is None:
+            texto_valor = "Indisponível"
+        else:
+            texto_valor = (
+                f"{float(valor):.2f} "
+                f"{unidade}"
+            )
+
+        partes = [
+            (
+                f"<b>{nome}</b><br>"
+                f"Valor atual: "
+                f"<b>{texto_valor}</b>"
+            )
+        ]
+
+        if referencia is not None:
+            partes.append(
+                (
+                    "<br>"
+                    "Referência recente: "
+                    f"{referencia:.2f} "
+                    f"{unidade}"
+                )
+            )
+
+            partes.append(
+                (
+                    "<br>"
+                    f"{self._formatar_variacao_sinal(analise)}"
+                )
+            )
+
+        if (mostrar_detalhe_tecnico and z_robusto is not None):
+            partes.append(
+                (
+                    "<br>"
+                    "<span style='color:#777777;"
+                    "font-size:11px;'>"
+                    "Detalhe técnico do sistema: "
+                    f"índice estatístico = "
+                    f"{z_robusto:.2f}"
+                    "</span>"
+                )
+            )
+
+        return "".join(partes)
+
+    def _estilo_alerta_base(self, estado: str) -> str:
+        estilos = {
+            "normal": """
+                QFrame#card_alerta_ia {
+                    background-color: white;
+                    border: 2px solid #d9eee4;
+                    border-radius: 12px;
+                }
+            """,
+            "observacao": """
+                QFrame#card_alerta_ia {
+                    background-color: #fffdf5;
+                    border: 2px solid #f1c40f;
+                    border-radius: 12px;
+                }
+            """,
+            "alerta": """
+                QFrame#card_alerta_ia {
+                    background-color: #fff8f8;
+                    border: 3px solid #ff8a8a;
+                    border-radius: 16px;
+                }
+            """,
+            "recuperacao": """
+                QFrame#card_alerta_ia {
+                    background-color: #f6fbff;
+                    border: 2px solid #3498db;
+                    border-radius: 12px;
+                }
+            """,
+            "indisponivel": """
+                QFrame#card_alerta_ia {
+                    background-color: #fafafa;
+                    border: 2px solid #b0b0b0;
+                    border-radius: 12px;
+                }
+            """,
+        }
+        return estilos.get(estado, estilos["normal"])
+
+    def _aplicar_estilo_alerta(self, estado: str) -> None:
+        self.estado_alerta_atual = estado
+
+        if estado == "alerta":
+            self.iniciar_animacao_alerta()
+        else:
+            self.parar_animacao_alerta()
+
+    def iniciar_animacao_alerta(self) -> None:
+        if self.alerta_animacao_timer.isActive():
+            return
+
+        self.alerta_animacao_fase_forte = False
+        self.card_alerta_ia.setStyleSheet(
+            self._estilo_alerta_base("alerta")
+        )
+        self.sombra_alerta.setBlurRadius(20)
+        self.sombra_alerta.setColor(QColor(255, 80, 80, 90))
+        self.alerta_animacao_timer.start(380)
+
+    def parar_animacao_alerta(self) -> None:
+        if self.alerta_animacao_timer.isActive():
+            self.alerta_animacao_timer.stop()
+
+        self.alerta_animacao_fase_forte = False
+        self.card_alerta_ia.setStyleSheet(
+            self._estilo_alerta_base(self.estado_alerta_atual)
+        )
+        self.sombra_alerta.setBlurRadius(20)
+        self.sombra_alerta.setColor(QColor(255, 0, 0, 0))
+
+    def _alternar_animacao_alerta(self) -> None:
+        self.alerta_animacao_fase_forte = (
+            not self.alerta_animacao_fase_forte
+        )
+
+        if self.alerta_animacao_fase_forte:
+            self.card_alerta_ia.setStyleSheet(
+                """
+                QFrame#card_alerta_ia {
+                    background-color: #fff1f1;
+                    border: 5px solid #ff2b2b;
+                    border-radius: 16px;
+                }
+                """
+            )
+            self.sombra_alerta.setBlurRadius(35)
+            self.sombra_alerta.setColor(QColor(255, 0, 0, 180))
+        else:
+            self.card_alerta_ia.setStyleSheet(
+                """
+                QFrame#card_alerta_ia {
+                    background-color: #fff8f8;
+                    border: 3px solid #ff8a8a;
+                    border-radius: 16px;
+                }
+                """
+            )
+            self.sombra_alerta.setBlurRadius(20)
+            self.sombra_alerta.setColor(QColor(255, 80, 80, 90))
