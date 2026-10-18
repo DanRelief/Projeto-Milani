@@ -142,7 +142,8 @@ class TelaInicial(QMainWindow):
         self.montar_menu_lateral(central, usuario)
 
     def _carregar_animal_para_monitoramento(self, animal: dict, e_proprietario: bool) -> None:
-        self.paciente["id"] = animal["id"]
+        # 1. Atualiza o dicionário local do paciente com os dados do MySQL
+        self.paciente["id"] = animal.get("id")
         self.paciente["nome"] = animal["nome"]
         self.paciente["especie"] = animal["especie"]
         self.paciente["idade"] = animal["idade"]
@@ -154,27 +155,41 @@ class TelaInicial(QMainWindow):
         self.paciente["medico_procedimento"] = animal.get("nome_responsavel", "Desconhecido")
         self.paciente["observacao_docente"] = animal.get("observacao_docente") or ""
 
+        responsavel_db = animal.get("responsavel_aplicacao") or animal.get("responsavel_id")
+        self.paciente["responsavel_id"] = responsavel_db
+
         self.atualizar_informacoes_paciente()
 
+        # Atualiza a caixa de observação se ela existir na interface
         if hasattr(self, "campo_observacao"):
             self.campo_observacao.setText(self.paciente["observacao_docente"])
 
+        # 2. Recupera o ID do usuário logado (com suporte a ambas as chaves)
         user_id_logado = self.usuario.get("id") or self.usuario.get("usuario_id")
+
+        # 3. Compara os IDs convertendo para int de forma segura
         try:
             e_dono = (int(user_id_logado) == int(responsavel_db)) if (user_id_logado and responsavel_db) else False
         except (ValueError, TypeError):
             e_dono = False
 
+        # O aluno pode alterar se for o dono do animal. O docente pode alterar qualquer um.
         pode_alterar = self.is_teacher or e_dono or e_proprietario
 
-        self.cadastrar_label.show()
+        # Sempre exibe o rótulo da seção de ações ao carregar um animal
+        if hasattr(self, "cadastrar_label"):
+            self.cadastrar_label.show()
+
+        # O botão Cadastrar Animal continua restrito ao Docente
         if self.is_teacher:
             self.btn_cadastrar.show()
 
         if pode_alterar:
+            # Reexibe os botões na tela
             self.btn_editar_paciente.show()
             self.btn_procedimento.show()
             self.btn_medicacao.show()
+
             self.btn_editar_paciente.setEnabled(True)
             self.btn_procedimento.setEnabled(True)
             self.btn_medicacao.setEnabled(True)
@@ -182,6 +197,13 @@ class TelaInicial(QMainWindow):
             self.btn_editar_paciente.hide()
             self.btn_procedimento.hide()
             self.btn_medicacao.hide()
+
+            QMessageBox.information(
+                self,
+                "Modo Somente Leitura",
+                f"Você está monitorando o paciente de {animal.get('nome_responsavel', 'outro aluno')}.\n\n"
+                "Ações de edição, procedimento e medicação não estão disponíveis."
+            )
 
     def update_chart(self, medicao) -> None:
         primeira_serie = self.series_map["freq_cardiaca"][0]
@@ -470,7 +492,6 @@ class TelaInicial(QMainWindow):
         return conteudo
 
     def exportar_relatorio_pdf(self) -> None:
-        """Gera um documento PDF profissional com o gráfico de monitoramento e o histórico."""
         if self.paciente.get("nome") == "---":
             QMessageBox.warning(
                 self, "Aviso", "Selecione um animal antes de exportar o relatório."
