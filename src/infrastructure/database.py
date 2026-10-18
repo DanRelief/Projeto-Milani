@@ -89,7 +89,6 @@ def cadastrar_animal(dados: dict) -> tuple[bool, str]:
             conn.close()
 
 def listar_animais() -> list[dict]:
-    """Lista todos os animais incluindo as observações do docente."""
     conn = None
     try:
         conn = get_db_connection()
@@ -139,7 +138,6 @@ def criar_sessao_monitoramento(animal_id: int, iniciado_por: int) -> str | None:
             conn.close()
 
 def salvar_observacao_docente(animal_id: int, observacao: str) -> bool:
-    """Atualiza o texto de observação do docente para o animal informado."""
     conn = None
     try:
         conn = get_db_connection()
@@ -158,7 +156,6 @@ def salvar_observacao_docente(animal_id: int, observacao: str) -> bool:
 
 
 def salvar_medicao_sinal_vital(sessao_id: str, parametro: str, valor: float, unidade: str, fonte: str = "simulador") -> bool:
-    """Insere o registro individual na tabela medicoes_sinais_vitais."""
     conn = None
     try:
         conn = get_db_connection()
