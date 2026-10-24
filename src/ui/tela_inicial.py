@@ -1,8 +1,10 @@
 from datetime import datetime
 from html import escape
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PySide6.QtCore import (
+    QCoreApplication,
     QEasingCurve,
     QParallelAnimationGroup,
     QPropertyAnimation,
@@ -33,6 +35,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QProgressDialog,
     QScrollArea,
     QSizePolicy,
     QTextEdit,
@@ -102,6 +105,8 @@ class TelaInicial(QMainWindow):
         self.worker_relatorio = None
         self.relatorio_ia_atual = None
         self.analises_atuais = {}
+        self.dialogo_progresso_relatorio = None
+        self.caminho_relatorio_ia_pendente = None
 
         self.estado_alerta_atual = "normal"
         self.alerta_animacao_timer = QTimer(self)
@@ -593,7 +598,7 @@ class TelaInicial(QMainWindow):
             return
 
         if incluir_relatorio_ia is None:
-            incluir_relatorio_ia = self.relatorio_ia_atual is not None
+            incluir_relatorio_ia = False
 
         nome_seguro = str(self.paciente.get("nome", "paciente")).strip() or "paciente"
         nome_sugerido = f"Relatorio_MISA_{nome_seguro}.pdf"
@@ -837,6 +842,413 @@ class TelaInicial(QMainWindow):
                     caminho_img_temp.unlink()
                 except OSError:
                     pass
+
+    def _capturar_graficos_relatorio_ia(
+        self,
+        pasta_temporaria: Path,
+    ) -> dict[str, Path]:
+        """Captura a visão geral e os três gráficos individuais do relatório IA.
+
+        O mesmo QChartView da interface é reutilizado para preservar séries,
+        escalas e dados. Ao final, o modo de visualização anterior é restaurado.
+        """
+        parametro_original = self.parametro_grafico_selecionado
+        caminhos: dict[str, Path] = {}
+
+        modos = (
+            (None, "geral", 65, "Capturando gráfico geral..."),
+            ("spo2", "spo2", 72, "Capturando gráfico de SpO₂..."),
+            ("temperatura", "temperatura", 79, "Capturando gráfico de Temperatura..."),
+            ("pam", "pam", 86, "Capturando gráfico de PAM..."),
+        )
+
+        try:
+            for parametro, nome_arquivo, progresso, mensagem in modos:
+                self._atualizar_progresso_relatorio(progresso, mensagem)
+                self.parametro_grafico_selecionado = parametro
+                self._atualizar_modo_grafico()
+
+                # Processa a alteração de visibilidade, título e escala antes
+                # de capturar a imagem.
+                QCoreApplication.processEvents()
+
+                caminho = pasta_temporaria / f"grafico_{nome_arquivo}.png"
+                pixmap = self.grafico_view.grab()
+
+                if pixmap.isNull() or not pixmap.save(str(caminho), "PNG"):
+                    raise RuntimeError(
+                        f"Não foi possível capturar o gráfico: {nome_arquivo}."
+                    )
+
+                caminhos[nome_arquivo] = caminho
+
+        finally:
+            self.parametro_grafico_selecionado = parametro_original
+            self._atualizar_modo_grafico()
+            QCoreApplication.processEvents()
+
+        return caminhos
+
+    def exportar_relatorio_completo_ia(
+        self,
+        caminho_arquivo: str | None = None,
+    ) -> bool:
+        """Gera o relatório unificado do M.I.S.A. com histórico, IA e 4 gráficos."""
+        if not self.paciente.get("nome") or self.paciente.get("nome") == "---":
+            QMessageBox.warning(
+                self,
+                "Relatório com IA",
+                "Selecione um animal antes de gerar o relatório.",
+            )
+            return
+
+        relatorio = self.relatorio_ia_atual
+        if relatorio is None:
+            QMessageBox.warning(
+                self,
+                "Relatório com IA",
+                "A análise por IA ainda não foi gerada para esta sessão.",
+            )
+            return
+
+        if caminho_arquivo is None:
+            nome_seguro = (
+                str(self.paciente.get("nome", "paciente")).strip() or "paciente"
+            )
+            nome_sugerido = f"Relatorio_MISA_IA_{nome_seguro}.pdf"
+            caminho_arquivo, _ = QFileDialog.getSaveFileName(
+                self,
+                "Salvar Relatório Completo com IA",
+                nome_sugerido,
+                "Arquivos PDF (*.pdf)",
+            )
+
+        if not caminho_arquivo:
+            return False
+
+        if not caminho_arquivo.lower().endswith(".pdf"):
+            caminho_arquivo += ".pdf"
+
+        cor_tema = "#287a55" if self.is_teacher else "#08b9df"
+        cor_cabecalho_tabela = "#216746" if self.is_teacher else "#078eaa"
+
+        def texto(valor, padrao="-") -> str:
+            if valor is None or str(valor).strip() == "":
+                return escape(str(padrao))
+            return escape(str(valor))
+
+        def lista_html(itens) -> str:
+            itens = list(itens or [])
+            if not itens:
+                return "<p><i>Nenhum item informado.</i></p>"
+            return "<ul>" + "".join(
+                f"<li>{texto(item)}</li>" for item in itens
+            ) + "</ul>"
+
+        try:
+            self._atualizar_progresso_relatorio(60, "Preparando dados do relatório...")
+
+            with TemporaryDirectory(prefix="misa_relatorio_ia_") as pasta_temp:
+                caminhos_graficos = self._capturar_graficos_relatorio_ia(
+                    Path(pasta_temp)
+                )
+
+                self._atualizar_progresso_relatorio(90, "Montando conteúdo do PDF...")
+
+                linhas_historico = []
+                for registro in self.historico:
+                    data_hora = (
+                        f"{registro.get('data', '')} {registro.get('hora', '')}"
+                    ).strip()
+
+                    if registro.get("tipo") == "Procedimento":
+                        detalhe = (
+                            f"<b>Procedimento:</b> "
+                            f"{texto(registro.get('procedimento'))}"
+                        )
+                        descricao = registro.get("descricao_detalhada")
+                        if descricao:
+                            detalhe += f"<br>{texto(descricao)}"
+                        responsavel = texto(registro.get("medico_procedimento"))
+                    else:
+                        dose = registro.get("quantidade") or "Não informada"
+                        detalhe = (
+                            f"<b>Medicação:</b> {texto(registro.get('medicacao'))} "
+                            f"({texto(dose)})"
+                        )
+                        via = registro.get("via_administracao")
+                        if via:
+                            detalhe += f"<br><b>Via:</b> {texto(via)}"
+                        responsavel = texto(registro.get("medico_medicacao"))
+
+                    linhas_historico.append(
+                        "<tr>"
+                        f"<td>{texto(data_hora)}</td>"
+                        f"<td><b>{texto(registro.get('tipo', 'Registro'))}</b></td>"
+                        f"<td>{detalhe}</td>"
+                        f"<td>{responsavel}</td>"
+                        "</tr>"
+                    )
+
+                if not linhas_historico:
+                    linhas_historico.append(
+                        "<tr><td colspan='4' style='text-align:center;'>"
+                        "<i>Nenhum procedimento ou medicação cadastrado.</i>"
+                        "</td></tr>"
+                    )
+
+                observacao_docente = (
+                    self.paciente.get("observacao_docente")
+                    or "Nenhuma observação registrada."
+                )
+
+                nome_usuario = (
+                    self.usuario.get("name")
+                    or self.usuario.get("nome")
+                    or "Usuário"
+                )
+                papel_usuario = (
+                    self.usuario.get("role")
+                    or self.usuario.get("papel")
+                    or "Usuário"
+                )
+                data_emissao = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+                graficos_html = f"""
+                    <h2>2. Gráficos do monitoramento</h2>
+
+                    <h3>2.1 Visão geral — SpO₂, Temperatura e PAM</h3>
+                    <div class="grafico">
+                        <img src="{caminhos_graficos['geral'].as_uri()}" />
+                    </div>
+
+                    <h3>2.2 SpO₂ — detalhamento individual</h3>
+                    <p class="legenda-grafico">
+                        Escala de detalhamento utilizada na interface: 70 a 100%.
+                    </p>
+                    <div class="grafico">
+                        <img src="{caminhos_graficos['spo2'].as_uri()}" />
+                    </div>
+
+                    <h3>2.3 Temperatura — detalhamento individual</h3>
+                    <p class="legenda-grafico">
+                        Escala de detalhamento utilizada na interface: 34 a 42 °C.
+                    </p>
+                    <div class="grafico">
+                        <img src="{caminhos_graficos['temperatura'].as_uri()}" />
+                    </div>
+
+                    <h3>2.4 PAM — detalhamento individual</h3>
+                    <p class="legenda-grafico">
+                        Escala de detalhamento utilizada na interface: 20 a 160 mmHg.
+                    </p>
+                    <div class="grafico">
+                        <img src="{caminhos_graficos['pam'].as_uri()}" />
+                    </div>
+                """
+
+                secao_ia = f"""
+                    <h2>5. Análise do monitoramento com IA</h2>
+
+                    <div class="info-box destaque-ia">
+                        <b>Resumo geral</b><br>
+                        {texto(getattr(relatorio, 'resumo_geral', ''))}
+                    </div>
+
+                    <h3>5.1 Evolução dos sinais</h3>
+                    {lista_html(getattr(relatorio, 'evolucao_sinais', []))}
+
+                    <h3>5.2 Eventos relevantes</h3>
+                    {lista_html(getattr(relatorio, 'eventos_relevantes', []))}
+
+                    <h3>5.3 Relações temporais</h3>
+                    {lista_html(getattr(relatorio, 'relacoes_temporais', []))}
+
+                    <h3>5.4 Informações ausentes</h3>
+                    {lista_html(getattr(relatorio, 'informacoes_ausentes', []))}
+
+                    <h3>5.5 Observações da IA</h3>
+                    {lista_html(getattr(relatorio, 'observacoes', []))}
+
+                    <div class="aviso">
+                        <b>Aviso:</b><br>
+                        {texto(getattr(relatorio, 'aviso', ''))}
+                    </div>
+                """
+
+                conteudo_html = f"""
+                <html>
+                <head>
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            margin: 20px;
+                            color: #1a1a1a;
+                            background-color: #ffffff;
+                            font-size: 10.5pt;
+                        }}
+                        h1 {{
+                            color: {cor_tema};
+                            border-bottom: 2px solid {cor_tema};
+                            padding-bottom: 6px;
+                            font-size: 20pt;
+                        }}
+                        h2 {{
+                            color: {cor_tema};
+                            margin-top: 22px;
+                            border-bottom: 1px solid #cccccc;
+                            padding-bottom: 4px;
+                            font-size: 14pt;
+                        }}
+                        h3 {{
+                            color: {cor_tema};
+                            margin-top: 15px;
+                            font-size: 12pt;
+                        }}
+                        .info-box {{
+                            background-color: #f2f4f7;
+                            border: 1px solid #b0bec5;
+                            padding: 10px;
+                            margin-bottom: 12px;
+                            line-height: 1.45;
+                        }}
+                        .info-box b {{ color: {cor_tema}; }}
+                        .destaque-ia {{
+                            border-left: 4px solid {cor_tema};
+                        }}
+                        .grafico {{
+                            text-align: center;
+                            margin: 8px 0 18px 0;
+                        }}
+                        .grafico img {{
+                            width: 100%;
+                            max-width: 540px;
+                            height: auto;
+                        }}
+                        .legenda-grafico {{
+                            color: #666666;
+                            font-size: 9pt;
+                            margin: 0 0 5px 0;
+                        }}
+                        .aviso {{
+                            margin-top: 14px;
+                            padding: 10px;
+                            border: 1px solid #d0d0d0;
+                            background-color: #fffdf5;
+                            font-style: italic;
+                        }}
+                        table {{
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-top: 8px;
+                            table-layout: fixed;
+                        }}
+                        th {{
+                            background-color: {cor_cabecalho_tabela};
+                            color: #ffffff;
+                            padding: 7px;
+                            text-align: left;
+                        }}
+                        td {{
+                            padding: 7px;
+                            border-bottom: 1px solid #d0d0d0;
+                            word-wrap: break-word;
+                        }}
+                        ul {{
+                            margin-top: 4px;
+                            margin-bottom: 10px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <h1>M.I.S.A. - Relatório Completo de Monitoramento com IA</h1>
+
+                    <div class="info-box">
+                        <b>Paciente:</b> {texto(self.paciente.get('nome'))} &nbsp;|&nbsp;
+                        <b>Espécie:</b> {texto(self.paciente.get('especie'))} &nbsp;|&nbsp;
+                        <b>Idade:</b> {texto(self.paciente.get('idade'), 0)} anos &nbsp;|&nbsp;
+                        <b>Porte:</b> {texto(self.paciente.get('porte'))}<br><br>
+                        <b>Responsável:</b> {texto(self.paciente.get('medico_procedimento'))}<br>
+                        <b>Emitido por:</b> {texto(nome_usuario)} ({texto(papel_usuario)})<br>
+                        <b>Data de emissão:</b> {texto(data_emissao)}
+                    </div>
+
+                    <h2>1. Identificação e contexto do paciente</h2>
+                    <div class="info-box">
+                        <b>Procedimento atual:</b> {texto(self.paciente.get('procedimento'))}<br>
+                        <b>Estado clínico:</b> {texto(self.paciente.get('estado_clinico'))}<br>
+                        <b>Última medicação:</b> {texto(self.paciente.get('ultima_medicacao'))}<br>
+                        <b>Dose/Quantidade:</b> {texto(self.paciente.get('quantidade_medicacao'))}
+                    </div>
+
+                    {graficos_html}
+
+                    <h2>3. Observações do docente</h2>
+                    <div class="info-box">{texto(observacao_docente)}</div>
+
+                    <h2>4. Histórico de procedimentos e medicações</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="22%">Data / Hora</th>
+                                <th width="15%">Tipo</th>
+                                <th width="43%">Descrição / Detalhes</th>
+                                <th width="20%">Responsável</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(linhas_historico)}
+                        </tbody>
+                    </table>
+
+                    {secao_ia}
+                </body>
+                </html>
+                """
+
+                self._atualizar_progresso_relatorio(94, "Renderizando o documento...")
+
+                documento = QTextDocument()
+                documento.setHtml(conteudo_html)
+
+                printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+                printer.setOutputFileName(caminho_arquivo)
+
+                self._atualizar_progresso_relatorio(97, "Gravando arquivo PDF...")
+                documento.print_(printer)
+
+            self._atualizar_progresso_relatorio(100, "Relatório concluído com sucesso.")
+            QCoreApplication.processEvents()
+            self._fechar_progresso_relatorio()
+
+            QMessageBox.information(
+                self,
+                "Relatório com IA",
+                (
+                    "Relatório completo gerado com sucesso!\n\n"
+                    "O PDF contém:\n"
+                    "• dados do paciente\n"
+                    "• gráfico geral\n"
+                    "• gráfico individual de SpO₂\n"
+                    "• gráfico individual de Temperatura\n"
+                    "• gráfico individual de PAM\n"
+                    "• observações do docente\n"
+                    "• histórico de procedimentos e medicações\n"
+                    "• análise estruturada da IA\n\n"
+                    f"Salvo em:\n{caminho_arquivo}"
+                ),
+            )
+            return True
+
+        except Exception as erro:
+            self._fechar_progresso_relatorio()
+            QMessageBox.critical(
+                self,
+                "Erro na geração do relatório com IA",
+                f"Não foi possível gerar o PDF completo: {erro}",
+            )
+            return False
 
     def criar_card_paciente(self) -> QFrame:
         card = self.criar_card()
@@ -2354,6 +2766,81 @@ class TelaInicial(QMainWindow):
             f"{texto_completo}"
         )
 
+    def _abrir_progresso_relatorio(self) -> None:
+        """Exibe uma janela modal com o progresso da geração do relatório IA."""
+        self._fechar_progresso_relatorio()
+
+        dialogo = QProgressDialog(
+            "Preparando geração do relatório...",
+            "",
+            0,
+            100,
+            self,
+        )
+        dialogo.setWindowTitle("Gerando Relatório com IA")
+        dialogo.setCancelButton(None)
+        dialogo.setWindowModality(Qt.WindowModality.WindowModal)
+        dialogo.setMinimumDuration(0)
+        dialogo.setAutoClose(False)
+        dialogo.setAutoReset(False)
+        dialogo.setValue(0)
+        dialogo.resize(430, 120)
+
+        cor_tema = "#287a55" if self.is_teacher else "#08b9df"
+        dialogo.setStyleSheet(
+            f"""
+            QProgressDialog {{
+                background-color: #ffffff;
+                color: #222222;
+                min-width: 420px;
+            }}
+            QLabel {{
+                color: #333333;
+                font-size: 13px;
+                padding: 8px 4px;
+            }}
+            QProgressBar {{
+                border: 1px solid #c7d0d9;
+                border-radius: 7px;
+                background-color: #f1f3f5;
+                color: #222222;
+                text-align: center;
+                min-height: 22px;
+                font-weight: 600;
+            }}
+            QProgressBar::chunk {{
+                background-color: {cor_tema};
+                border-radius: 6px;
+            }}
+            """
+        )
+
+        self.dialogo_progresso_relatorio = dialogo
+        dialogo.show()
+        QCoreApplication.processEvents()
+
+    def _atualizar_progresso_relatorio(
+        self,
+        valor: int,
+        mensagem: str,
+    ) -> None:
+        """Atualiza porcentagem e descrição da etapa atual do relatório."""
+        dialogo = self.dialogo_progresso_relatorio
+        if dialogo is None:
+            return
+
+        valor = max(0, min(100, int(valor)))
+        dialogo.setLabelText(mensagem)
+        dialogo.setValue(valor)
+        QCoreApplication.processEvents()
+
+    def _fechar_progresso_relatorio(self) -> None:
+        dialogo = self.dialogo_progresso_relatorio
+        if dialogo is not None:
+            dialogo.close()
+            dialogo.deleteLater()
+            self.dialogo_progresso_relatorio = None
+
     def gerar_relatorio(self,) -> None:
 
         if self.id_sessao_atual is None:
@@ -2376,20 +2863,34 @@ class TelaInicial(QMainWindow):
         ):
             return
 
-        # Fecha o menu lateral.
+        nome_seguro = (
+            str(self.paciente.get("nome", "paciente")).strip() or "paciente"
+        )
+        nome_sugerido = f"Relatorio_MISA_IA_{nome_seguro}.pdf"
+        caminho_arquivo, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Relatório Completo com IA",
+            nome_sugerido,
+            "Arquivos PDF (*.pdf)",
+        )
+
+        if not caminho_arquivo:
+            return
+
+        if not caminho_arquivo.lower().endswith(".pdf"):
+            caminho_arquivo += ".pdf"
+
+        self.caminho_relatorio_ia_pendente = caminho_arquivo
+
+        # Fecha o menu lateral e exibe o progresso antes de iniciar a IA.
         self.fechar_menu()
+        self._abrir_progresso_relatorio()
+        self._atualizar_progresso_relatorio(5, "Preparando dados da sessão...")
 
-        self.btn_relatorio.setEnabled(
-            False
-        )
+        self.btn_relatorio.setEnabled(False)
+        self.btn_relatorio.setText("Gerando relatório...")
 
-        self.btn_relatorio.setText(
-            "Gerando relatório..."
-        )
-
-        self.thread_relatorio = QThread(
-            self
-        )
+        self.thread_relatorio = QThread(self)
 
         self.worker_relatorio = (
             WorkerRelatorio(
@@ -2430,6 +2931,7 @@ class TelaInicial(QMainWindow):
             self._finalizar_geracao_relatorio
         )
 
+        self._atualizar_progresso_relatorio(15, "Analisando monitoramento com a IA...")
         self.thread_relatorio.start()
 
     def _relatorio_gerado(self, relatorio) -> None:
@@ -2439,13 +2941,21 @@ class TelaInicial(QMainWindow):
         print("[M.I.S.A] Relatório por IA gerado.")
         print(relatorio.resumo_geral)
 
-        # O mesmo fluxo agora termina no PDF do colega, enriquecido pela IA.
-        self.exportar_relatorio_pdf(incluir_relatorio_ia=True)
+        self._atualizar_progresso_relatorio(55, "Análise da IA concluída.")
+
+        # O botão lateral gera o relatório completo: conteúdo clínico,
+        # histórico, quatro gráficos e análise estruturada pela IA.
+        self.exportar_relatorio_completo_ia(
+            self.caminho_relatorio_ia_pendente
+        )
 
     def _erro_geracao_relatorio(
         self,
         mensagem: str,
     ) -> None:
+
+        self._fechar_progresso_relatorio()
+        self.caminho_relatorio_ia_pendente = None
 
         QMessageBox.critical(
             self,
@@ -2460,6 +2970,11 @@ class TelaInicial(QMainWindow):
     def _finalizar_geracao_relatorio(self) -> None:
         self.btn_relatorio.setEnabled(True)
         self.btn_relatorio.setText("Relatório com IA")
+
+        # Em caso de encerramento antecipado, garante que a janela de progresso
+        # não permaneça aberta. Em sucesso ela já terá sido fechada ao chegar a 100%.
+        self._fechar_progresso_relatorio()
+        self.caminho_relatorio_ia_pendente = None
 
         if self.thread_relatorio is not None:
             self.thread_relatorio.deleteLater()
