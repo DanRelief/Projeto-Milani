@@ -34,6 +34,7 @@ def get_db_connection():
         port=int(_obter_variavel_obrigatoria("DB_PORT")),
     )
 
+# --- USUÁRIOS E AUTENTICAÇÃO ---
 
 def _fechar_conexao(conexao, cursor) -> None:
     """Fecha cursor e conexão com segurança."""

@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS animais (
         ON UPDATE CASCADE
 );
 
+#ALTER TABLE animais 
+#ADD COLUMN observacao_docente TEXT DEFAULT NULL AFTER quantidade;
+
 -- 3. Sessões de monitoramento
 CREATE TABLE IF NOT EXISTS sessoes_monitoramento (
     id VARCHAR(36) PRIMARY KEY,
@@ -147,79 +150,44 @@ CREATE TABLE IF NOT EXISTS eventos_alerta (
     )
 );
 
--- 6. Procedimentos realizados durante uma sessão
-CREATE TABLE IF NOT EXISTS procedimentos (
+-- 1. Histórico Permanente de Procedimentos
+CREATE TABLE IF NOT EXISTS historico_procedimentos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-
-    sessao_id VARCHAR(36) NOT NULL,
-
-    nome VARCHAR(255) NOT NULL,
-
-    executado_por VARCHAR(150) DEFAULT NULL,
-
-    registrado_por INT NOT NULL,
-
-    data_hora DATETIME(6) NOT NULL,
-
-    observacao TEXT DEFAULT NULL,
-
+    animal_id INT NOT NULL,
+    realizado_por INT NOT NULL, -- ID do aluno/docente que realizou
+    procedimento VARCHAR(255) NOT NULL,
+    descricao_detalhada TEXT DEFAULT NULL,
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_procedimento_sessao
-        FOREIGN KEY (sessao_id)
-        REFERENCES sessoes_monitoramento(id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    CONSTRAINT fk_proc_animal 
+        FOREIGN KEY (animal_id) REFERENCES animais(id) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_proc_usuario 
+        FOREIGN KEY (realizado_por) REFERENCES usuarios(id) 
+        ON DELETE RESTRICT ON UPDATE CASCADE,
 
-    CONSTRAINT fk_procedimento_usuario
-        FOREIGN KEY (registrado_por)
-        REFERENCES usuarios(id)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
-    INDEX idx_procedimento_sessao_data (
-        sessao_id,
-        data_hora
-    )
+    INDEX idx_proc_animal_data (animal_id, data_hora)
 );
 
-
--- 7. Medicações administradas durante uma sessão
-CREATE TABLE IF NOT EXISTS medicacoes (
+-- 2. Histórico Permanente de Medicações Administradas
+CREATE TABLE IF NOT EXISTS historico_medicacoes (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-
-    sessao_id VARCHAR(36) NOT NULL,
-
-    nome VARCHAR(150) NOT NULL,
-
-    quantidade DOUBLE DEFAULT NULL,
-
-    unidade VARCHAR(30) DEFAULT NULL,
-
-    administrado_por VARCHAR(150) DEFAULT NULL,
-
-    registrado_por INT NOT NULL,
-
-    data_hora DATETIME(6) NOT NULL,
-
+    animal_id INT NOT NULL,
+    administrado_por INT NOT NULL, -- ID do aluno/docente que aplicou
+    medicamento VARCHAR(100) NOT NULL,
+    dose_quantidade VARCHAR(100) NOT NULL,
+    via_administracao VARCHAR(50) DEFAULT NULL, -- Ex: IV, IM, SC, Oral
     observacao TEXT DEFAULT NULL,
-
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_medicacao_sessao
-        FOREIGN KEY (sessao_id)
-        REFERENCES sessoes_monitoramento(id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    CONSTRAINT fk_med_animal 
+        FOREIGN KEY (animal_id) REFERENCES animais(id) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_med_usuario 
+        FOREIGN KEY (administrado_por) REFERENCES usuarios(id) 
+        ON DELETE RESTRICT ON UPDATE CASCADE,
 
-    CONSTRAINT fk_medicacao_usuario
-        FOREIGN KEY (registrado_por)
-        REFERENCES usuarios(id)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
-    INDEX idx_medicacao_sessao_data (
-        sessao_id,
-        data_hora
-    )
+    INDEX idx_med_animal_data (animal_id, data_hora)
 );
