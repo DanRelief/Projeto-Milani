@@ -546,6 +546,7 @@ class TelaLogin(QMainWindow):
             "role": "Aluno" if role == "student" else "Docente",
             "identifier_label": "RA" if role == "student" else "E-mail",
             "identifier": usuario.get("identificador", identifier),
+            "primeiro_acesso": bool(usuario.get("primeiro_acesso",False,))
         }
         self.authenticated.emit(session)
         return True
