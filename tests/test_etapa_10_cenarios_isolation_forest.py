@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta
+from dataclasses import dataclass
+import random
 
 from src.ia.anomaly.construtor_dataset import (
     criar_amostras_janelas,
     criar_dataset_janelas,
+)
+from src.ia.anomaly.vetor_caracteristicas import (
+    criar_vetor_caracteristicas,
 )
 
 from src.ia.anomaly.isolation_forest import (
@@ -71,6 +76,7 @@ def criar_dataset_treinamento(
             extrator_caracteristicas=extrator,
             tamanho_janela=61,
             passo=6,
+            funcao_vetor=criar_vetor_caracteristicas,
         )
 
         dataset.extend(
@@ -91,6 +97,7 @@ def criar_dataset_teste_estavel(
         extrator_caracteristicas=extrator,
         tamanho_janela=61,
         passo=6,
+        funcao_vetor=criar_vetor_caracteristicas,
     )
 
 def criar_amostras_teste_queda(
@@ -146,6 +153,7 @@ def criar_amostras_teste_queda(
         extrator_caracteristicas=extrator,
         tamanho_janela=61,
         passo=6,
+        funcao_vetor=criar_vetor_caracteristicas,
     )
 
     return (

@@ -1,4 +1,6 @@
-from src.infrastructure.database import get_db_connection
+from src.infrastructure.database import (
+    get_db_connection,
+)
 
 
 class RepositorioAlertas:
@@ -49,7 +51,10 @@ class RepositorioAlertas:
             conexao = get_db_connection()
             cursor = conexao.cursor()
 
-            cursor.execute(comando,valores,)
+            cursor.execute(
+                comando,
+                valores,
+            )
 
             conexao.commit()
 
@@ -63,5 +68,57 @@ class RepositorioAlertas:
             if cursor is not None:
                 cursor.close()
 
-            if (conexao is not None and conexao.is_connected()):
+            if (
+                conexao is not None
+                and conexao.is_connected()
+            ):
+                conexao.close()
+
+    def listar_por_sessao(self,id_sessao: str,) -> list[dict]:
+
+        comando = """
+            SELECT
+                id,
+                id_alerta,
+                sessao_id,
+                tipo_evento,
+                parametro,
+                data_hora,
+                estado_monitoramento,
+                valor_atual,
+                z_robusto,
+                ewma,
+                inclinacao,
+                qualidade_sinal,
+                motivo
+            FROM eventos_alerta
+            WHERE sessao_id = %s
+            ORDER BY data_hora ASC, id ASC
+        """
+
+        conexao = None
+        cursor = None
+
+        try:
+            conexao = get_db_connection()
+
+            cursor = conexao.cursor(
+                dictionary=True
+            )
+
+            cursor.execute(
+                comando,
+                (id_sessao,),
+            )
+
+            return cursor.fetchall()
+
+        finally:
+            if cursor is not None:
+                cursor.close()
+
+            if (
+                conexao is not None
+                and conexao.is_connected()
+            ):
                 conexao.close()

@@ -19,12 +19,8 @@ HORARIO_BRASIL = ZoneInfo(
 
 class SimuladorSinaisVitais:
 
-    def __init__(
-        self,
-        id_paciente: str,
-        id_sessao: str,
-        seed: int | None = None,
-    ):
+    def __init__(self,id_paciente: str,id_sessao: str,seed: int | None = None,baseline_spo2: float = 98.0,amplitude_spo2: float = 0.25,desvio_ruido_spo2: float = 0.15,tendencia_spo2_por_minuto: float = 0.0,):
+
         self.id_paciente = id_paciente
         self.id_sessao = id_sessao
 
@@ -33,11 +29,17 @@ class SimuladorSinaisVitais:
         self.passo = 0
 
         self.baseline = {
-            ParametroVital.SPO2: 98.0,
+            ParametroVital.SPO2: baseline_spo2,
             ParametroVital.TEMPERATURA: 37.5,
             ParametroVital.PRESSAO_ARTERIAL_MEDIA: 85.0,
         }
 
+        self.baseline_inicial = dict(self.baseline)
+
+        self.amplitude_spo2 = amplitude_spo2
+        self.desvio_ruido_spo2 = desvio_ruido_spo2
+        self.tendencia_spo2_por_minuto = tendencia_spo2_por_minuto
+        self.data_hora_inicio = None
         self.units = {
             ParametroVital.SPO2: "%",
             ParametroVital.TEMPERATURA: "°C",
@@ -56,30 +58,22 @@ class SimuladorSinaisVitais:
             min(maximo, valor),
         )
 
-    def _generate_spo2(self) -> float:
+    def _generate_spo2(self,data_hora: datetime,) -> float:
 
-        baseline = self.baseline[
-            ParametroVital.SPO2
-        ]
+        baseline = self.baseline[ParametroVital.SPO2]
 
-        valor = (
-            baseline
-            + 0.25 * math.sin(
-                self.passo / 8.0
-            )
-            + self.random.gauss(
-                0,
-                0.15,
-            )
-        )
+        if self.data_hora_inicio is None:
+            minutos_decorridos = 0.0
+        else:
+            minutos_decorridos = ((data_hora - self.data_hora_inicio).total_seconds()/ 60.0)
 
-        valor = self._limit(
-            valor,
-            0.0,
-            100.0,
-        )
+        tendencia = (self.tendencia_spo2_por_minuto * minutos_decorridos)
 
-        return round(valor, 2)
+        valor = (baseline + self.amplitude_spo2 * math.sin(self.passo / 8.0)+ self.random.gauss(0,self.desvio_ruido_spo2,) + tendencia)
+
+        valor = self._limit( valor, 0.0, 100.0,)
+
+        return round(valor,2,)
 
     def _generate_temperature(self) -> float:
 
@@ -125,21 +119,23 @@ class SimuladorSinaisVitais:
 
         return round(valor, 2)
 
-    def generate_snapshot(
-        self,
-        data_hora: datetime | None = None,
-    ) -> list[Medicao]:
+    def generate_snapshot(self,data_hora: datetime | None = None,) -> list[Medicao]:
 
         if data_hora is None:
             data_hora = datetime.now(
                 HORARIO_BRASIL
             )
 
+        if self.data_hora_inicio is None:
+            self.data_hora_inicio = (
+                data_hora
+            )
+
         self.passo += 1
 
         valors = {
             ParametroVital.SPO2:
-                self._generate_spo2(),
+                self._generate_spo2(data_hora),
 
             ParametroVital.TEMPERATURA:
                 self._generate_temperature(),
@@ -218,6 +214,91 @@ class SimuladorSinaisVitais:
 
         return measurements
 
+    def reduzir_spo2_teste(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+    
+            baseline_atual = self.baseline[
+                ParametroVital.SPO2
+            ]
+    
+            self.baseline[
+                ParametroVital.SPO2
+            ] = self._limit(
+                baseline_atual - quantidade,
+                0.0,
+                100.0,
+            )
+    
+    
+    def restaurar_spo2_teste(
+        self,
+    ) -> None:
+
+        self.baseline[
+            ParametroVital.SPO2
+        ] = 98.0
+
+
+    def simular_queda_spo2(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+
+        parametro = ParametroVital.SPO2
+
+        self.baseline[parametro] = (
+            self._limit(
+                self.baseline[parametro]
+                - quantidade,
+                0.0,
+                100.0,
+            )
+        )
+
+
+    def simular_queda_pam(
+        self,
+        quantidade: float = 15.0,
+    ) -> None:
+
+        parametro = (
+            ParametroVital
+            .PRESSAO_ARTERIAL_MEDIA
+        )
+
+        self.baseline[parametro] = (
+            self._limit(
+                self.baseline[parametro]
+                - quantidade,
+                20.0,
+                200.0,
+            )
+        )
+
+
+    def simular_aumento_temperatura(
+        self,
+        quantidade: float = 0.8,
+    ) -> None:
+
+        parametro = (
+            ParametroVital.TEMPERATURA
+        )
+
+        self.baseline[parametro] += (
+            quantidade
+        )
+
+
+    def restaurar_sinais_teste(
+        self,
+    ) -> None:
+
+        self.baseline = dict(
+            self.baseline_inicial
+        )
 class SinalVitalSimulacao(QObject):
 
     measurement_generated = Signal(object)
@@ -269,3 +350,56 @@ class SinalVitalSimulacao(QObject):
         self.valor_atual_time += timedelta(
             seconds=2
         )
+
+    
+    def simular_queda_spo2(
+    self,
+    quantidade: float = 3.0,
+) -> None:
+
+        self.simulator.reduzir_spo2_teste(
+            quantidade
+        )
+
+
+    def restaurar_spo2(
+        self,
+    ) -> None:
+
+        self.simulator.restaurar_spo2_teste()
+
+    def simular_queda_spo2(
+        self,
+        quantidade: float = 3.0,
+    ) -> None:
+
+        self.simulator.simular_queda_spo2(
+            quantidade
+        )
+
+
+    def simular_queda_pam(
+        self,
+        quantidade: float = 15.0,
+    ) -> None:
+
+        self.simulator.simular_queda_pam(
+            quantidade
+        )
+
+
+    def simular_aumento_temperatura(
+        self,
+        quantidade: float = 0.8,
+    ) -> None:
+
+        self.simulator.simular_aumento_temperatura(
+            quantidade
+        )
+
+
+    def restaurar_sinais_teste(
+        self,
+    ) -> None:
+
+        self.simulator.restaurar_sinais_teste()

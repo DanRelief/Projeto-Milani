@@ -84,7 +84,7 @@ class MotorAlertas:
         
         if (entrada.estado == EstadoMonitoramento.NORMAL):
 
-            id_alerta = (self._alertas_ativos.pop(chave,None,))
+            id_alerta = self._alertas_ativos.pop(chave,None,)
 
             if id_alerta is None:
                 return None

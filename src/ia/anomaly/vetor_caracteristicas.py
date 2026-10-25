@@ -1,19 +1,64 @@
 def criar_vetor_caracteristicas(caracteristicas,) -> list[float]:
 
     return [
-        float(caracteristicas.valor_atual),
+        caracteristicas.valor_atual,
+        caracteristicas.media,
+        caracteristicas.mediana,
+        caracteristicas.minimo,
+        caracteristicas.maximo,
+        caracteristicas.desvio_padrao,
+        caracteristicas.delta,
+        caracteristicas.inclinacao,
+    ]
 
-        float(caracteristicas.media),
 
-        float(caracteristicas.mediana),
+def criar_vetor_relativo(caracteristicas,) -> list[float]:
 
-        float(caracteristicas.minimo),
+    referencia = (
+        caracteristicas.mediana
+    )
 
-        float(caracteristicas.maximo),
+    if referencia == 0:
+        raise ValueError(
+            "Não é possível criar o vetor "
+            "relativo com mediana igual a zero."
+        )
 
-        float(caracteristicas.desvio_padrao),
+    desvio_atual_relativo = (
+        (
+            caracteristicas.valor_atual
+            - caracteristicas.mediana
+        )
+        / referencia
+    )
 
-        float(caracteristicas.delta),
+    amplitude_relativa = (
+        (
+            caracteristicas.maximo
+            - caracteristicas.minimo
+        )
+        / referencia
+    )
 
-        float(caracteristicas.inclinacao),
+    variabilidade_relativa = (
+        caracteristicas.desvio_padrao
+        / referencia
+    )
+
+    delta_relativo = (
+        caracteristicas.delta
+        / referencia
+    )
+
+    inclinacao_relativa = (
+        caracteristicas.inclinacao
+        / referencia
+    )
+
+    return [
+        desvio_atual_relativo,
+        amplitude_relativa,
+        variabilidade_relativa,
+        delta_relativo,
+        inclinacao_relativa,
     ]
